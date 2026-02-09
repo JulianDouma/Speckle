@@ -181,6 +181,163 @@ def group_by_status(issues: List[Dict[str, Any]], max_closed: int = MAX_CLOSED) 
     return columns
 
 
+# === Epic View Mode: Hierarchical Task Visualization (gh-59) ===
+
+def calculate_epic_progress(children: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate progress statistics for an epic based on its children."""
+    if not children:
+        return {'total': 0, 'closed': 0, 'in_progress': 0, 'percent': 0}
+    
+    total = len(children)
+    closed = sum(1 for c in children if c.get('status') == 'closed')
+    in_progress = sum(1 for c in children if c.get('status') == 'in_progress')
+    blocked = sum(1 for c in children if c.get('status') in ('blocked', 'deferred'))
+    
+    percent = int((closed / total) * 100) if total > 0 else 0
+    
+    return {
+        'total': total,
+        'closed': closed,
+        'in_progress': in_progress,
+        'blocked': blocked,
+        'open': total - closed - in_progress - blocked,
+        'percent': percent
+    }
+
+
+def should_expand_epic(epic: Dict[str, Any], children: List[Dict[str, Any]]) -> bool:
+    """Determine if an epic should be auto-expanded in the UI."""
+    # Always expand if has in-progress children (active work)
+    if any(c.get('status') == 'in_progress' for c in children):
+        return True
+    
+    # Expand if has blocked children (needs attention)
+    if any(c.get('status') in ('blocked', 'deferred') for c in children):
+        return True
+    
+    # Expand if recently updated (within 24 hours)
+    try:
+        updated = epic.get('updated_at', '')
+        if updated:
+            dt = datetime.fromisoformat(updated.replace('Z', '+00:00'))
+            age_hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+            if age_hours < 24:
+                return True
+    except (ValueError, TypeError):
+        pass
+    
+    # Expand if epic itself is in progress
+    if epic.get('status') == 'in_progress':
+        return True
+    
+    return False
+
+
+def get_issues_with_hierarchy(issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Organize issues into a hierarchy of epics and their children.
+    
+    Returns:
+        {
+            'epics': {
+                'epic-id': {
+                    ...epic_data,
+                    'children': [...],
+                    'progress': {...},
+                    'expanded': bool
+                }
+            },
+            'orphans': [...],  # Tasks without parent epic
+            'flat_issues': [...]  # All issues for flat view
+        }
+    """
+    # Identify epics and build parent-child map
+    epics = {}
+    children_map = {}  # parent_id -> [children]
+    orphans = []
+    
+    for issue in issues:
+        issue_type = issue.get('issue_type', 'task')
+        parent_id = issue.get('parent', '')
+        
+        if issue_type == 'epic':
+            epics[issue['id']] = {
+                **issue,
+                'children': [],
+                'progress': {'total': 0, 'closed': 0, 'percent': 0},
+                'expanded': False
+            }
+        elif parent_id:
+            # Has a parent - add to children map
+            if parent_id not in children_map:
+                children_map[parent_id] = []
+            children_map[parent_id].append(issue)
+        else:
+            # No parent and not an epic - orphan
+            if issue_type != 'epic':
+                orphans.append(issue)
+    
+    # Attach children to their epics and calculate progress
+    for epic_id, epic in epics.items():
+        children = children_map.get(epic_id, [])
+        epic['children'] = sorted(children, key=lambda x: (x.get('priority', 4), x.get('created_at', '')))
+        epic['progress'] = calculate_epic_progress(children)
+        epic['expanded'] = should_expand_epic(epic, children)
+    
+    # Sort epics by priority then name
+    sorted_epics = dict(sorted(
+        epics.items(),
+        key=lambda x: (x[1].get('priority', 4), x[1].get('title', ''))
+    ))
+    
+    # Sort orphans
+    orphans.sort(key=lambda x: (x.get('priority', 4), x.get('created_at', '')))
+    
+    return {
+        'epics': sorted_epics,
+        'orphans': orphans,
+        'flat_issues': issues  # Keep original flat list
+    }
+
+
+def group_by_status_hierarchical(hierarchy: Dict[str, Any], max_closed: int = MAX_CLOSED) -> Dict[str, Dict]:
+    """
+    Group hierarchical issues by status, preserving epic structure.
+    
+    Returns columns where each contains either:
+    - Epics with their children
+    - Orphan tasks
+    """
+    columns = {
+        'open': {'epics': [], 'orphans': []},
+        'in_progress': {'epics': [], 'orphans': []},
+        'blocked': {'epics': [], 'orphans': []},
+        'closed': {'epics': [], 'orphans': []}
+    }
+    
+    # Group epics by their status
+    for epic_id, epic in hierarchy['epics'].items():
+        status = epic.get('status', 'open')
+        if status == 'deferred':
+            status = 'blocked'
+        if status in columns:
+            columns[status]['epics'].append(epic)
+    
+    # Group orphans by their status
+    for orphan in hierarchy['orphans']:
+        status = orphan.get('status', 'open')
+        if status == 'deferred':
+            status = 'blocked'
+        if status in columns:
+            columns[status]['orphans'].append(orphan)
+    
+    # Limit closed items
+    columns['closed']['epics'] = columns['closed']['epics'][:max_closed]
+    columns['closed']['orphans'] = columns['closed']['orphans'][:max_closed - len(columns['closed']['epics'])]
+    
+    return columns
+
+
 # === T008: Time Ago Formatting ===
 def time_ago(timestamp: str) -> str:
     """Convert timestamp to human-readable 'X ago' format."""
@@ -772,7 +929,233 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             border-top: 1px solid var(--border);
         }}
         
-        /* === BUTTONS (Fluent Button) === */
+        /* === EPIC VIEW MODE (gh-59) === */
+        .epic-card {{
+            background: var(--card-bg);
+            border-radius: 4px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 12px;
+            border-left: 3px solid var(--fluent-purple);
+            overflow: hidden;
+        }}
+        
+        .epic-card.p0, .epic-card.p1 {{ border-left-color: var(--fluent-red); }}
+        .epic-card.p2 {{ border-left-color: var(--fluent-orange); }}
+        .epic-card.p3, .epic-card.p4 {{ border-left-color: var(--fluent-green); }}
+        
+        .epic-header {{
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            cursor: pointer;
+            gap: 10px;
+            transition: background var(--duration-1) var(--ease-1);
+        }}
+        
+        .epic-header:hover {{
+            background: var(--fluent-gray-20);
+        }}
+        
+        .expand-icon {{
+            font-size: 10px;
+            color: var(--text-muted);
+            width: 16px;
+            flex-shrink: 0;
+            transition: transform var(--duration-1) var(--ease-1);
+        }}
+        
+        .epic-info {{
+            flex: 1;
+            min-width: 0;
+        }}
+        
+        .epic-title {{
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text);
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+        
+        .epic-meta {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }}
+        
+        .epic-count {{
+            font-weight: 500;
+        }}
+        
+        .epic-status-badge {{
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 2px;
+        }}
+        
+        .epic-status-badge.in-progress {{
+            background: rgba(0, 120, 212, 0.15);
+            color: var(--fluent-primary);
+        }}
+        
+        .epic-status-badge.blocked {{
+            background: rgba(209, 52, 56, 0.15);
+            color: var(--fluent-red);
+        }}
+        
+        .epic-progress {{
+            width: 80px;
+            flex-shrink: 0;
+        }}
+        
+        /* Progress Bar */
+        .progress-bar {{
+            height: 6px;
+            background: var(--fluent-gray-30);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }}
+        
+        .progress-fill {{
+            height: 100%;
+            background: var(--fluent-primary);
+            border-radius: 3px;
+            transition: width var(--duration-2) var(--ease-1);
+        }}
+        
+        .progress-bar.progress-complete .progress-fill {{
+            background: var(--fluent-green);
+        }}
+        
+        .progress-bar.progress-partial .progress-fill {{
+            background: var(--fluent-orange);
+        }}
+        
+        .progress-bar.progress-none .progress-fill {{
+            background: var(--fluent-gray-50);
+        }}
+        
+        .progress-text {{
+            position: absolute;
+            right: 0;
+            top: -16px;
+            font-size: 10px;
+            color: var(--text-muted);
+        }}
+        
+        /* Epic Children */
+        .epic-children {{
+            border-top: 1px solid var(--border);
+            padding: 8px 12px 12px 32px;
+            background: var(--fluent-gray-10);
+        }}
+        
+        .epic-children.collapsed {{
+            display: none;
+        }}
+        
+        .epic-children .card {{
+            margin-bottom: 8px;
+            font-size: 12px;
+        }}
+        
+        .epic-children .card:last-child {{
+            margin-bottom: 0;
+        }}
+        
+        .epic-children .card-title {{
+            font-size: 12px;
+            -webkit-line-clamp: 1;
+        }}
+        
+        /* Orphans Section */
+        .orphans-section {{
+            background: var(--card-bg);
+            border-radius: 4px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 12px;
+            border-left: 3px solid var(--fluent-gray-90);
+            overflow: hidden;
+        }}
+        
+        .orphans-header {{
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            cursor: pointer;
+            gap: 10px;
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: background var(--duration-1) var(--ease-1);
+        }}
+        
+        .orphans-header:hover {{
+            background: var(--fluent-gray-20);
+        }}
+        
+        .orphans-title {{
+            font-weight: 500;
+            flex: 1;
+        }}
+        
+        .orphans-count {{
+            font-size: 11px;
+        }}
+        
+        .orphans-children {{
+            border-top: 1px solid var(--border);
+            padding: 8px 12px 12px 32px;
+            background: var(--fluent-gray-10);
+        }}
+        
+        .orphans-children.collapsed {{
+            display: none;
+        }}
+        
+        /* View Toggle */
+        .view-toggle {{
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 12px;
+        }}
+        
+        .view-btn {{
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all var(--duration-1) var(--ease-1);
+        }}
+        
+        .view-btn:first-child {{
+            border-radius: 4px 0 0 4px;
+        }}
+        
+        .view-btn:last-child {{
+            border-radius: 0 4px 4px 0;
+            border-left: none;
+        }}
+        
+        .view-btn.active {{
+            background: var(--fluent-primary);
+            border-color: var(--fluent-primary);
+            color: white;
+        }}
+        
+        .view-btn:hover:not(.active) {{
+            background: var(--fluent-gray-20);
+            color: var(--text);
+        }}
+        
         .terminal-btn, .session-btn {{
             display: inline-flex;
             align-items: center;
@@ -1084,6 +1467,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     <header>
         <h1>◇ Speckle Board</h1>
         <div class="controls">
+            <div class="view-toggle">
+                <button class="view-btn" id="view-flat" onclick="setViewMode('flat')" title="Flat view">☰ Flat</button>
+                <button class="view-btn" id="view-epic" onclick="setViewMode('epic')" title="Epic view">◇ Epics</button>
+            </div>
             {filter_html}
             <span class="refresh-badge">↻ {refresh}s</span>
             <button class="theme-toggle" onclick="ThemeController.toggle()" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
@@ -1576,6 +1963,148 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 window.location = url;
             }});
         }}
+        
+        // === Epic View Controller ===
+        const EpicController = {{
+            STORAGE_KEY: 'speckle-view-mode',
+            EXPANDED_KEY: 'speckle-expanded-epics',
+            
+            getViewMode() {{
+                // URL param takes priority
+                const url = new URL(window.location);
+                const urlView = url.searchParams.get('view');
+                if (urlView) return urlView;
+                // Fall back to localStorage
+                return localStorage.getItem(this.STORAGE_KEY) || 'flat';
+            }},
+            
+            setViewMode(mode) {{
+                localStorage.setItem(this.STORAGE_KEY, mode);
+                const url = new URL(window.location);
+                if (mode === 'flat') {{
+                    url.searchParams.delete('view');
+                }} else {{
+                    url.searchParams.set('view', mode);
+                }}
+                window.location = url;
+            }},
+            
+            getExpandedEpics() {{
+                try {{
+                    const stored = localStorage.getItem(this.EXPANDED_KEY);
+                    return stored ? JSON.parse(stored) : {{}};
+                }} catch {{
+                    return {{}};
+                }}
+            }},
+            
+            setEpicExpanded(epicId, expanded) {{
+                const state = this.getExpandedEpics();
+                state[epicId] = expanded;
+                localStorage.setItem(this.EXPANDED_KEY, JSON.stringify(state));
+            }},
+            
+            toggleEpic(epicId) {{
+                const card = document.querySelector(`[data-epic-id="${{epicId}}"]`);
+                if (!card) return;
+                
+                const isExpanded = card.classList.toggle('expanded');
+                this.setEpicExpanded(epicId, isExpanded);
+                
+                // Update chevron
+                const chevron = card.querySelector('.expand-icon');
+                if (chevron) {{
+                    chevron.textContent = isExpanded ? '▼' : '▶';
+                }}
+                
+                // Toggle children visibility
+                const children = card.querySelector('.epic-children');
+                if (children) {{
+                    children.classList.toggle('collapsed', !isExpanded);
+                    children.classList.toggle('expanded', isExpanded);
+                }}
+            }},
+            
+            toggleOrphans() {{
+                const section = document.querySelector('.orphans-section');
+                if (!section) return;
+                
+                const isExpanded = section.classList.toggle('expanded');
+                localStorage.setItem('speckle-orphans-expanded', isExpanded);
+                
+                // Update chevron
+                const chevron = section.querySelector('.expand-icon');
+                if (chevron) {{
+                    chevron.textContent = isExpanded ? '▼' : '▶';
+                }}
+                
+                // Toggle children visibility
+                const children = section.querySelector('.orphans-children');
+                if (children) {{
+                    children.classList.toggle('collapsed', !isExpanded);
+                    children.classList.toggle('expanded', isExpanded);
+                }}
+            }},
+            
+            initViewMode() {{
+                const mode = this.getViewMode();
+                
+                // Update button states
+                const flatBtn = document.getElementById('view-flat');
+                const epicBtn = document.getElementById('view-epic');
+                
+                if (flatBtn) flatBtn.classList.toggle('active', mode === 'flat');
+                if (epicBtn) epicBtn.classList.toggle('active', mode === 'epic');
+                
+                // Restore expanded state for epics
+                const expandedEpics = this.getExpandedEpics();
+                document.querySelectorAll('[data-epic-id]').forEach(card => {{
+                    const epicId = card.dataset.epicId;
+                    if (expandedEpics[epicId]) {{
+                        card.classList.add('expanded');
+                        const chevron = card.querySelector('.expand-icon');
+                        if (chevron) chevron.textContent = '▼';
+                        const children = card.querySelector('.epic-children');
+                        if (children) {{
+                            children.classList.remove('collapsed');
+                            children.classList.add('expanded');
+                        }}
+                    }}
+                }});
+                
+                // Restore orphans expanded state
+                const orphansExpanded = localStorage.getItem('speckle-orphans-expanded') === 'true';
+                const orphansSection = document.querySelector('.orphans-section');
+                if (orphansSection && orphansExpanded) {{
+                    orphansSection.classList.add('expanded');
+                    const chevron = orphansSection.querySelector('.expand-icon');
+                    if (chevron) chevron.textContent = '▼';
+                    const children = orphansSection.querySelector('.orphans-children');
+                    if (children) {{
+                        children.classList.remove('collapsed');
+                        children.classList.add('expanded');
+                    }}
+                }}
+            }}
+        }};
+        
+        // Global functions for onclick handlers
+        function setViewMode(mode) {{
+            EpicController.setViewMode(mode);
+        }}
+        
+        function toggleEpic(epicId) {{
+            EpicController.toggleEpic(epicId);
+        }}
+        
+        function toggleOrphans() {{
+            EpicController.toggleOrphans();
+        }}
+        
+        // Initialize Epic View on page load
+        document.addEventListener('DOMContentLoaded', () => {{
+            EpicController.initViewMode();
+        }});
     </script>
 </body>
 </html>'''
@@ -1765,10 +2294,169 @@ def render_column(status: str, issues: List[Dict[str, Any]], terminals: Optional
     '''
 
 
+# === Epic View Mode Rendering (gh-59) ===
+
+def render_progress_bar(percent: int, size: str = 'normal') -> str:
+    """Render a progress bar with percentage."""
+    filled = int(percent / 10)
+    empty = 10 - filled
+    
+    bar_class = 'progress-bar' if size == 'normal' else 'progress-bar-small'
+    
+    # Color based on progress
+    if percent == 100:
+        color_class = 'progress-complete'
+    elif percent >= 50:
+        color_class = 'progress-good'
+    elif percent > 0:
+        color_class = 'progress-partial'
+    else:
+        color_class = 'progress-none'
+    
+    return f'''<div class="{bar_class} {color_class}">
+        <div class="progress-fill" style="width: {percent}%"></div>
+        <span class="progress-text">{percent}%</span>
+    </div>'''
+
+
+def render_epic_card(epic: Dict[str, Any], terminals: Dict[str, Any], sessions: Dict[str, Any]) -> str:
+    """Render an epic card with collapsible children."""
+    epic_id = epic.get('id', 'unknown')
+    title = epic.get('title', 'Untitled').replace('Epic: ', '')
+    progress = epic.get('progress', {})
+    children = epic.get('children', [])
+    expanded = epic.get('expanded', False)
+    priority = epic.get('priority', 4)
+    
+    # Priority styling
+    p_class = f'p{priority}' if priority <= 4 else 'p4'
+    
+    # Progress stats
+    total = progress.get('total', 0)
+    closed = progress.get('closed', 0)
+    percent = progress.get('percent', 0)
+    in_progress_count = progress.get('in_progress', 0)
+    blocked_count = progress.get('blocked', 0)
+    
+    # Expand/collapse state
+    expand_icon = '▼' if expanded else '▶'
+    expanded_class = 'expanded' if expanded else 'collapsed'
+    
+    # Status indicators
+    status_badges = []
+    if in_progress_count > 0:
+        status_badges.append(f'<span class="epic-status-badge in-progress">{in_progress_count} active</span>')
+    if blocked_count > 0:
+        status_badges.append(f'<span class="epic-status-badge blocked">{blocked_count} blocked</span>')
+    status_html = ' '.join(status_badges)
+    
+    # Render children cards
+    children_html = ''
+    if children:
+        for child in children:
+            children_html += render_card(child, terminals, sessions)
+    else:
+        children_html = '<div class="empty">No tasks</div>'
+    
+    return f'''
+    <div class="epic-card {p_class}" data-epic-id="{epic_id}">
+        <div class="epic-header" onclick="toggleEpic('{epic_id}')">
+            <span class="expand-icon">{expand_icon}</span>
+            <div class="epic-info">
+                <span class="epic-title">{title}</span>
+                <div class="epic-meta">
+                    <span class="epic-count">{closed}/{total} tasks</span>
+                    {status_html}
+                </div>
+            </div>
+            <div class="epic-progress">
+                {render_progress_bar(percent)}
+            </div>
+        </div>
+        <div class="epic-children {expanded_class}" id="epic-children-{epic_id}">
+            {children_html}
+        </div>
+    </div>
+    '''
+
+
+def render_orphans_section(orphans: List[Dict[str, Any]], terminals: Dict[str, Any], sessions: Dict[str, Any]) -> str:
+    """Render the uncategorized/orphan tasks section."""
+    if not orphans:
+        return ''
+    
+    count = len(orphans)
+    cards_html = ''.join(render_card(orphan, terminals, sessions) for orphan in orphans)
+    
+    return f'''
+    <div class="orphans-section">
+        <div class="orphans-header" onclick="toggleOrphans()">
+            <span class="expand-icon" id="orphans-expand-icon">▶</span>
+            <span class="orphans-title">Uncategorized</span>
+            <span class="orphans-count">{count} tasks</span>
+        </div>
+        <div class="orphans-children collapsed" id="orphans-children">
+            {cards_html}
+        </div>
+    </div>
+    '''
+
+
+def render_column_epic_view(status: str, column_data: Dict[str, List], 
+                            terminals: Dict[str, Any], sessions: Dict[str, Any]) -> str:
+    """Render a kanban column in epic view mode."""
+    titles = {
+        'open': 'Backlog',
+        'in_progress': 'In Progress',
+        'blocked': 'Blocked',
+        'closed': 'Done'
+    }
+    
+    title = titles.get(status, status.replace('_', ' ').title())
+    epics = column_data.get('epics', [])
+    orphans = column_data.get('orphans', [])
+    
+    # Count total items (epics + orphans)
+    count = len(epics) + len(orphans)
+    
+    # Render epic cards
+    epics_html = ''
+    for epic in epics:
+        epics_html += render_epic_card(epic, terminals, sessions)
+    
+    # Render orphans section
+    orphans_html = render_orphans_section(orphans, terminals, sessions) if orphans else ''
+    
+    if not epics_html and not orphans_html:
+        content_html = '<div class="empty">No issues</div>'
+    else:
+        content_html = epics_html + orphans_html
+    
+    return f'''
+    <div class="column {status}">
+        <div class="column-header">
+            <span class="column-title">{title}</span>
+            <span class="column-count">{count}</span>
+        </div>
+        <div class="cards epic-view">
+            {content_html}
+        </div>
+    </div>
+    '''
+
+
 def render_board(issues: List[Dict[str, Any]], label_filter: Optional[str] = None,
-                 refresh: int = DEFAULT_REFRESH, ws_port: int = TERMINAL_WS_PORT) -> str:
-    """Render the full board as HTML."""
-    columns = group_by_status(issues)
+                 refresh: int = DEFAULT_REFRESH, ws_port: int = TERMINAL_WS_PORT,
+                 epic_view: bool = False) -> str:
+    """Render the full board as HTML.
+    
+    Args:
+        issues: List of issue dictionaries
+        label_filter: Optional label to filter by
+        refresh: Auto-refresh interval in seconds
+        ws_port: WebSocket port for terminal server
+        epic_view: If True, render in epic/hierarchy view mode
+    """
     all_labels = get_all_labels(issues)
     
     # Get active terminal sessions
@@ -1777,10 +2465,20 @@ def render_board(issues: List[Dict[str, Any]], label_filter: Optional[str] = Non
     # Get Claude session info
     sessions = get_sessions_info()
     
-    # Build columns HTML
+    # Build columns HTML based on view mode
     columns_html = ''
-    for status in ['open', 'in_progress', 'blocked', 'closed']:
-        columns_html += render_column(status, columns[status], terminals, sessions)
+    
+    if epic_view:
+        # Epic view: group by hierarchy
+        hierarchy = get_issues_with_hierarchy(issues)
+        columns = group_by_status_hierarchical(hierarchy)
+        for status in ['open', 'in_progress', 'blocked', 'closed']:
+            columns_html += render_column_epic_view(status, columns[status], terminals, sessions)
+    else:
+        # Flat view: traditional kanban
+        columns = group_by_status(issues)
+        for status in ['open', 'in_progress', 'blocked', 'closed']:
+            columns_html += render_column(status, columns[status], terminals, sessions)
     
     # Filter dropdown
     filter_options = '<option value="">All issues</option>'
@@ -1792,7 +2490,11 @@ def render_board(issues: List[Dict[str, Any]], label_filter: Optional[str] = Non
     
     # Metadata
     timestamp = datetime.now().strftime('%H:%M:%S')
-    issue_count = sum(len(v) for v in columns.values())
+    if epic_view:
+        hierarchy = get_issues_with_hierarchy(issues)
+        issue_count = len(hierarchy['epics']) + len(hierarchy['orphans'])
+    else:
+        issue_count = len(issues)
     
     return HTML_TEMPLATE.format(
         columns_html=columns_html,
@@ -1827,6 +2529,9 @@ class BoardHandler(http.server.BaseHTTPRequestHandler):
             if label_filter == '':
                 label_filter = None
             
+            # Check for epic view mode
+            epic_view = query.get('view', ['flat'])[0] == 'epic'
+            
             issues = get_issues(label_filter)
             
             # T023: Merge GitHub links if enabled
@@ -1834,12 +2539,40 @@ class BoardHandler(http.server.BaseHTTPRequestHandler):
                 github_links = load_github_links()
                 issues = merge_github_links(issues, github_links)
             
-            html = render_board(issues, label_filter, self.refresh, self.ws_port)
+            html = render_board(issues, label_filter, self.refresh, self.ws_port, epic_view)
             
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()
             self.wfile.write(html.encode('utf-8'))
+        
+        elif parsed.path == '/api/epics':
+            # Return epics with hierarchy and progress (gh-59)
+            issues = get_issues()
+            hierarchy = get_issues_with_hierarchy(issues)
+            
+            # Format epics for API response
+            epics_response = []
+            for epic_id, epic in hierarchy['epics'].items():
+                epics_response.append({
+                    'id': epic_id,
+                    'title': epic.get('title', ''),
+                    'status': epic.get('status', 'open'),
+                    'priority': epic.get('priority', 4),
+                    'progress': epic.get('progress', {}),
+                    'children_count': len(epic.get('children', [])),
+                    'expanded': epic.get('expanded', False)
+                })
+            
+            response = {
+                'epics': epics_response,
+                'orphan_count': len(hierarchy['orphans'])
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
             
         elif parsed.path == '/api/issues':
             label_filter = query.get('filter', [None])[0]
