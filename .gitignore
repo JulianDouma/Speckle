@@ -16,3 +16,4 @@ Thumbs.db
 .speckle/__pycache__/
 .speckle/sessions/
 .speckle/scripts/__pycache__/
+.speckle/terminals/
