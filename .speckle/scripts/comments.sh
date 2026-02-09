@@ -127,13 +127,20 @@ add_comment_safe() {
 }
 
 # Get git diff statistics for the last commit
-# Returns: Lines in format "files_changed\nlines_added\nlines_removed"
+# Returns: JSON object with files, added, removed counts
+# Output format: {"files":"file1,file2","files_count":2,"added":10,"removed":5}
 get_diff_stats() {
     local base="${1:-HEAD~1}"
     
-    # Get files changed
+    # Get files changed as comma-separated list
     local files
-    files=$(git diff --name-only "$base" 2>/dev/null || echo "")
+    files=$(git diff --name-only "$base" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
+    
+    # Count files
+    local files_count=0
+    if [ -n "$files" ]; then
+        files_count=$(echo "$files" | tr ',' '\n' | wc -l | tr -d ' ')
+    fi
     
     # Get line stats
     local stats
@@ -142,18 +149,45 @@ get_diff_stats() {
     local lines_added=0
     local lines_removed=0
     
-    while IFS=$'\t' read -r added removed _file; do
-        if [ "$added" != "-" ] && [ -n "$added" ]; then
-            lines_added=$((lines_added + added))
-        fi
-        if [ "$removed" != "-" ] && [ -n "$removed" ]; then
-            lines_removed=$((lines_removed + removed))
-        fi
-    done <<< "$stats"
+    if [ -n "$stats" ]; then
+        while IFS=$'\t' read -r added removed _file; do
+            if [ "$added" != "-" ] && [ -n "$added" ]; then
+                lines_added=$((lines_added + added))
+            fi
+            if [ "$removed" != "-" ] && [ -n "$removed" ]; then
+                lines_removed=$((lines_removed + removed))
+            fi
+        done <<< "$stats"
+    fi
     
-    echo "$files"
-    echo "$lines_added"
-    echo "$lines_removed"
+    # Output as JSON for reliable parsing
+    printf '{"files":"%s","files_count":%d,"added":%d,"removed":%d}\n' \
+        "$files" "$files_count" "$lines_added" "$lines_removed"
+}
+
+# Parse diff stats JSON - helper for callers without jq
+# Usage: parse_diff_stats "$json" "field"  where field is files|files_count|added|removed
+parse_diff_stats() {
+    local json="${1:-}"
+    local field="${2:-}"
+    
+    case "$field" in
+        files)
+            echo "$json" | sed 's/.*"files":"\([^"]*\)".*/\1/'
+            ;;
+        files_count)
+            echo "$json" | sed 's/.*"files_count":\([0-9]*\).*/\1/'
+            ;;
+        added)
+            echo "$json" | sed 's/.*"added":\([0-9]*\).*/\1/'
+            ;;
+        removed)
+            echo "$json" | sed 's/.*"removed":\([0-9]*\).*/\1/'
+            ;;
+        *)
+            echo "0"
+            ;;
+    esac
 }
 
 # Export functions for use in commands
@@ -161,3 +195,4 @@ export -f format_completion_comment
 export -f format_progress_note
 export -f add_comment_safe
 export -f get_diff_stats
+export -f parse_diff_stats

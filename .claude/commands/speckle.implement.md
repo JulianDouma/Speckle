@@ -176,11 +176,11 @@ After the agent completes implementation:
 # Source comment helpers
 source ".speckle/scripts/comments.sh"
 
-# Gather implementation details using helper function
-DIFF_OUTPUT=$(get_diff_stats HEAD~1)
-FILES_CHANGED=$(echo "$DIFF_OUTPUT" | head -n -2)
-LINES_ADDED=$(echo "$DIFF_OUTPUT" | tail -2 | head -1)
-LINES_REMOVED=$(echo "$DIFF_OUTPUT" | tail -1)
+# Gather implementation details using helper function (returns JSON)
+DIFF_JSON=$(get_diff_stats HEAD~1)
+FILES_CHANGED=$(parse_diff_stats "$DIFF_JSON" "files")
+LINES_ADDED=$(parse_diff_stats "$DIFF_JSON" "added")
+LINES_REMOVED=$(parse_diff_stats "$DIFF_JSON" "removed")
 
 # Format completion comment using helper
 COMMENT=$(format_completion_comment "$SELECTED_TASK" "$SELECTED_BEAD" "$FILES_CHANGED" "$LINES_ADDED" "$LINES_REMOVED")
