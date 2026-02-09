@@ -132,3 +132,44 @@ git checkout -b NNN-feature-name
 - Commands Added: 2 (`/speckle.status`, `/speckle.progress`)
 - Commands Updated: 1 (`/speckle.implement`)
 - Helper Scripts: 1 (`comments.sh`)
+
+### v0.3.0 Development (2026-02-09)
+
+**Feature:** Enhanced Labels
+
+**Developed Using:** v0.2.0 (comments integration, status command, sync automation)
+
+#### What Worked Well
+- Parallel task markers (`[P]`) enabled multiple agents to work simultaneously on foundation tasks (T002, T003)
+- Phase-based organization provided clear structure: Foundation → US1 → US2 → US3 → Polish
+- Label filtering with `bd list --label` validated immediately - used to query own tasks by version, phase, and story
+- Story markers (`[US1]`, `[US2]`, `[US3]`) mapped cleanly to story labels for traceability
+- Self-dogfooding: the label system was tested on its own issues during development
+
+#### Pain Points Discovered
+- No issues discovered - the enhanced labels feature worked as designed
+- Label generation from branch names, phases, and story markers all functioning correctly
+
+#### Self-Validation (T016)
+- ✅ `bd list --label v0.3.0` returns all 16 tasks with version label
+- ✅ `bd list --label phase:us1` returns 5 tasks for User Story 1
+- ✅ `bd list --label phase:us2` returns 2 tasks for User Story 2 (closed)
+- ✅ `bd list --label phase:us3` returns 3 tasks for User Story 3 (closed)
+- ✅ `bd list --label phase:polish` returns 2 tasks for Polish phase
+- ✅ `bd list --label phase:foundation` returns 4 tasks (all closed)
+- ✅ `bd list --label story:us1` returns tasks with story marker
+- ✅ Labels include: `speckle`, `v0.3.0`, `phase:*`, `story:*`, `task`, `docs`
+
+#### Metrics
+- Tasks: 16 (T001-T016)
+- User Stories: 3 (US1: Auto labels, US2: Filter labels, US3: Status enhancement)
+- Phases: 5 (Foundation, US1, US2, US3, Polish)
+- Commands Updated: 1 (`/speckle.status` - phase grouping, --by-story)
+- Helper Scripts: 1 (`labels.sh` - slugify, extract_phase_label, extract_story_label, build_label_string)
+- Files Changed: 7
+- Lines Added: 587
+
+#### Development Approach
+- Used parallel agents for foundation phase (T002, T003 marked with `[P]`)
+- Sequential implementation for user story phases
+- Self-validation baked into polish phase (T016)
