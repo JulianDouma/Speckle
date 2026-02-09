@@ -22,6 +22,9 @@ Verify environment before proceeding:
 # Source label helpers
 source ".speckle/scripts/labels.sh"
 
+# Source epic helpers
+source ".speckle/scripts/epics.sh"
+
 # Check beads is available
 if ! command -v bd &> /dev/null; then
     echo "❌ Beads not installed. Install from: https://github.com/steveyegge/beads"
@@ -60,6 +63,27 @@ MAPPING_FILE="$FEATURE_DIR/.speckle-mapping.json"
 # Initialize mapping if not exists
 if [ ! -f "$MAPPING_FILE" ]; then
     echo '{"version":1,"feature":"'$BRANCH'","created":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","tasks":{}}' > "$MAPPING_FILE"
+fi
+```
+
+## Create/Load Epic
+
+Create an epic for this feature if one doesn't exist:
+
+```bash
+# Check if epic already exists for this feature
+EPIC_ID=$(get_epic_id "$MAPPING_FILE")
+
+if [ -z "$EPIC_ID" ]; then
+    # Create new epic from spec
+    EPIC_ID=$(create_epic "$BRANCH" "$SPEC_FILE")
+    
+    # Save epic ID to mapping
+    save_epic_id "$MAPPING_FILE" "$EPIC_ID"
+    
+    echo "🎯 Created epic: $EPIC_ID"
+else
+    echo "🎯 Using existing epic: $EPIC_ID"
 fi
 ```
 
@@ -135,6 +159,10 @@ for (const task of tasks) {
             created: new Date().toISOString()
         }
         console.log(`+ Created ${beadId} for ${task.id}`)
+        
+        // Link task to epic
+        exec(`link_task_to_epic "${beadId}" "${EPIC_ID}"`)
+        console.log(`  ↳ Linked to epic ${EPIC_ID}`)
     }
 }
 
