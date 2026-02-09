@@ -12,30 +12,21 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
-## Landing the Plane (Session Completion)
+## Session Completion
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+Work is complete only after `git push` succeeds.
 
-**MANDATORY WORKFLOW:**
+### Checklist
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+1. **File issues** for remaining work
+2. **Run quality gates** (if code changed): tests, linters, builds
+3. **Update issues**: close finished, update in-progress
+4. **Push to remote**:
    ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
+   git pull --rebase && bd sync && git push
+   git status  # Should show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+5. **Clean up**: `git stash clear`, `git remote prune origin`
+6. **Hand off**: summarize progress and next steps
 
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-- ALWAYS commit and push when you are sure you are done - don't wait for permission
-
+If push fails, resolve conflicts and retry until successful.

@@ -4,6 +4,48 @@ All notable changes to Speckle are documented here.
 
 ## [1.3.0] - 2026-02-09
 
+### System Color Mode & GitHub Integration
+
+Addresses [#16](https://github.com/JulianDouma/Speckle/issues/16) - Add system color mode and GitHub issue integration.
+
+### Added
+
+#### System Color Mode
+- Automatic dark/light theme detection via `prefers-color-scheme`
+- Theme toggle button in board header (sun/moon icons)
+- localStorage persistence for user preference
+- Smooth CSS transitions between themes
+- WCAG 2.1 AA compliant contrast ratios
+- Dark theme colors:
+  - Background: slate-900 (#0f172a)
+  - Cards: slate-800 (#1e293b)
+  - Text: slate-200 (#e2e8f0)
+  - Accessible priority/type badges
+
+#### GitHub Integration
+- `/speckle.github.auth` - Check authentication status
+- `/speckle.github.sync` - Bidirectional sync with GitHub Issues
+- Layered authentication:
+  1. Environment variables (GITHUB_TOKEN, GH_TOKEN)
+  2. GitHub CLI (gh auth token)
+  3. Config file (~/.speckle/config.toml)
+- Label mapping (priority/type to GitHub labels)
+- Issue linkage tracking (.speckle/github-links.jsonl)
+- GitHub icon on linked board cards
+- `--github` flag for board to show GitHub links
+
+### Board Enhancements
+- New `--github` flag to display GitHub links on cards
+- GitHub icon SVG in card header for linked issues
+- Click to open linked issue in GitHub
+
+### Technical
+- `github.py` - 500+ lines, pure stdlib (no PyGithub dependency)
+- Uses GitHub REST API via urllib
+- Rate limit handling
+- Built using Speckle workflow (28 tasks across 5 phases)
+- Full spec in `specs/016-board-enhancements/`
+
 ### Systematic Issue Creation Workflow
 
 Addresses [#2](https://github.com/JulianDouma/Speckle/issues/2) - Systematic approach for defining issues using Speckle.
