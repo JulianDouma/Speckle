@@ -38,12 +38,14 @@ bd init
 ### Install Speckle
 
 ```bash
-# Clone and install
-git clone https://github.com/JulianDouma/Speckle.git /tmp/speckle
-/tmp/speckle/install.sh /path/to/your/project
+# One-liner install (to current directory)
+curl -fsSL https://raw.githubusercontent.com/JulianDouma/Speckle/main/install-remote.sh | bash
+
+# Install to specific project
+curl -fsSL https://raw.githubusercontent.com/JulianDouma/Speckle/main/install-remote.sh | bash -s -- /path/to/project
 
 # Verify installation
-/tmp/speckle/install.sh --check /path/to/your/project
+curl -fsSL https://raw.githubusercontent.com/JulianDouma/Speckle/main/install-remote.sh | bash -s -- --check
 
 # Restart your AI agent to load commands
 ```

@@ -42,9 +42,9 @@ jobs:
           git add .
           git commit -m "Initial commit"
 
-      - name: Run installer
+      - name: Run installer (via remote script)
         run: |
-          ./install.sh /tmp/speckle-test
+          ./install-remote.sh /tmp/speckle-test
 
       - name: Verify installation structure
         run: |
@@ -162,9 +162,9 @@ jobs:
           python3 .speckle/scripts/github.py --help
           echo "OK: github.py runs"
 
-      - name: Run install --check
+      - name: Run install --check (via remote script)
         run: |
-          ./install.sh --check /tmp/speckle-test
+          ./install-remote.sh --check /tmp/speckle-test
 
       - name: Cleanup
         if: always()

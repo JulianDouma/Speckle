@@ -261,6 +261,178 @@ class BeadSession:
         return self.state in (SessionState.SPAWNING, SessionState.RUNNING, SessionState.STUCK)
 
 
+# === Role Management Functions ===
+
+AGENTS_DIR = PROJECT_ROOT / ".speckle/agents"
+
+
+def get_role_config(role: str) -> Dict[str, Any]:
+    """Get configuration for a specific role."""
+    role_lower = role.lower()
+    if role_lower in ROLE_SESSION_CONFIG:
+        return ROLE_SESSION_CONFIG[role_lower]
+    # Default to DEV config
+    return ROLE_SESSION_CONFIG["dev"]
+
+
+def load_persona(role: str) -> str:
+    """
+    Load persona prompt from .speckle/agents/{role}.md
+    
+    Supports frontmatter format:
+    ---
+    role: dev
+    tier: 3
+    description: Implementation specialist
+    tools: [read, write, bash, git]
+    ---
+    
+    # Developer Agent
+    You are a senior software developer...
+    """
+    role_lower = role.lower()
+    persona_file = AGENTS_DIR / f"{role_lower}.md"
+    
+    if not persona_file.exists():
+        # Return default persona based on role config
+        config = get_role_config(role_lower)
+        return f"""You are a {config.get('description', 'Speckle agent')}.
+
+Your role: {role.upper()}
+Tier: {config.get('tier', AgentTier.WORKER).value if isinstance(config.get('tier'), AgentTier) else config.get('tier', 3)}
+
+Focus on your assigned task and use only the tools permitted for your role.
+"""
+    
+    try:
+        content = persona_file.read_text()
+        
+        # Parse frontmatter if present
+        if content.startswith("---"):
+            # Find end of frontmatter
+            end_match = re.search(r'\n---\s*\n', content[3:])
+            if end_match:
+                # Return content after frontmatter
+                return content[3 + end_match.end():].strip()
+        
+        return content.strip()
+    except IOError:
+        return ""
+
+
+def parse_persona_frontmatter(role: str) -> Dict[str, Any]:
+    """
+    Parse frontmatter from persona file.
+    
+    Returns dict with role, tier, description, tools from frontmatter.
+    """
+    role_lower = role.lower()
+    persona_file = AGENTS_DIR / f"{role_lower}.md"
+    
+    if not persona_file.exists():
+        return {}
+    
+    try:
+        content = persona_file.read_text()
+        
+        if not content.startswith("---"):
+            return {}
+        
+        # Find frontmatter block
+        end_match = re.search(r'\n---\s*\n', content[3:])
+        if not end_match:
+            return {}
+        
+        frontmatter = content[3:3 + end_match.start()]
+        result = {}
+        
+        # Simple YAML-like parsing (key: value)
+        for line in frontmatter.split('\n'):
+            line = line.strip()
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip()
+                
+                # Parse arrays [item1, item2]
+                if value.startswith('[') and value.endswith(']'):
+                    items = value[1:-1].split(',')
+                    result[key] = [item.strip().strip('"\'') for item in items]
+                # Parse numbers
+                elif value.isdigit():
+                    result[key] = int(value)
+                # Strip quotes from strings
+                else:
+                    result[key] = value.strip('"\'')
+        
+        return result
+    except IOError:
+        return {}
+
+
+def assign_worker_role(bead: Dict[str, Any]) -> str:
+    """
+    Determine which role should work on a bead based on intent.
+    
+    Analyzes bead labels and title to detect intent and assign appropriate role.
+    """
+    labels = [l.lower() for l in bead.get("labels", [])]
+    title = bead.get("title", "").lower()
+    description = bead.get("description", "").lower()
+    
+    # Check labels first (highest priority)
+    for label in labels:
+        if label in BEAD_INTENT_ROLE_MAPPING:
+            return BEAD_INTENT_ROLE_MAPPING[label]
+    
+    # Check title and description keywords
+    combined_text = f"{title} {description}"
+    for keyword, role in BEAD_INTENT_ROLE_MAPPING.items():
+        if keyword in combined_text:
+            return role
+    
+    # Default to DEV for implementation work
+    return "dev"
+
+
+def detect_intent(text: str) -> str:
+    """
+    Detect the intent type from text.
+    
+    Returns: backend, design, marketing, roadmap, research, or mixed
+    Based on opencode-agent-conversations detectIntent() logic.
+    """
+    text_lower = text.lower()
+    
+    # Intent keyword patterns
+    intent_patterns = {
+        "backend": ["api", "database", "backend", "server", "endpoint", "migration", "query"],
+        "design": ["ui", "ux", "design", "frontend", "component", "style", "layout"],
+        "marketing": ["docs", "documentation", "blog", "copy", "content", "readme"],
+        "roadmap": ["plan", "milestone", "epic", "sprint", "schedule", "priority"],
+        "research": ["research", "investigate", "analyze", "compare", "evaluate"],
+    }
+    
+    intent_scores = {intent: 0 for intent in intent_patterns}
+    
+    for intent, keywords in intent_patterns.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                intent_scores[intent] += 1
+    
+    # Find highest scoring intent
+    max_score = max(intent_scores.values())
+    if max_score == 0:
+        return "mixed"
+    
+    # Check for tie (mixed)
+    top_intents = [i for i, s in intent_scores.items() if s == max_score]
+    if len(top_intents) > 1:
+        return "mixed"
+    
+    return top_intents[0]
+
+
 class BeadSessionManager:
     """
     Manages ephemeral Claude sessions for in-progress beads.
@@ -315,6 +487,10 @@ class BeadSessionManager:
     
     def _session_from_dict(self, data: Dict[str, Any]) -> BeadSession:
         """Create BeadSession from dict data."""
+        # Parse tools - handle both list and set
+        tools_data = data.get("tools", ["read", "write", "bash", "git", "bd"])
+        tools = set(tools_data) if isinstance(tools_data, list) else tools_data
+        
         return BeadSession(
             bead_id=data["bead_id"],
             title=data.get("title", "Untitled"),
@@ -328,6 +504,10 @@ class BeadSessionManager:
             last_activity=datetime.fromisoformat(data["last_activity"]) if data.get("last_activity") else _utc_now(),
             output_lines=data.get("output_lines", 0),
             error=data.get("error"),
+            # Role-based fields
+            role=data.get("role", "dev"),
+            tier=data.get("tier", 3),
+            tools=tools,
         )
     
     def _is_process_running(self, pid: int) -> bool:
@@ -379,7 +559,7 @@ class BeadSessionManager:
                 pass
         return "No previous learnings recorded."
     
-    def build_task_context(self, bead: Dict[str, Any]) -> str:
+    def build_task_context(self, bead: Dict[str, Any], session: Optional[BeadSession] = None) -> str:
         """Build the task context to inject into the Claude session."""
         bead_id = bead.get("id", "unknown")
         title = bead.get("title", "Untitled")
@@ -389,13 +569,26 @@ class BeadSessionManager:
         
         progress = self.get_progress_context()
         
-        return f"""## Task Assignment
+        # Include persona if session has one
+        persona_section = ""
+        role_section = ""
+        if session and session.persona_prompt:
+            persona_section = f"""## Your Role
+
+{session.persona_prompt}
+
+"""
+            role_section = f"""**Role:** {session.role.upper()} (Tier {session.tier})
+**Permitted Tools:** {', '.join(sorted(session.tools))}
+"""
+        
+        return f"""{persona_section}## Task Assignment
 
 **Bead:** {bead_id}
 **Title:** {title}
 **Priority:** P{priority}
 **Labels:** {', '.join(labels) if labels else 'None'}
-
+{role_section}
 ### Description
 {description}
 
@@ -417,13 +610,19 @@ class BeadSessionManager:
 
 ### Important
 - Focus ONLY on this task
+- Stay within your role's permitted tools
 - Ask for clarification if requirements are unclear
 - If stuck, update status: `bd update {bead_id} --status blocked --reason "Why blocked"`
 """
     
-    def spawn_session(self, bead_id: str) -> Optional[BeadSession]:
+    def spawn_session(self, bead_id: str, role: Optional[str] = None) -> Optional[BeadSession]:
         """
         Spawn a new Claude session for a bead.
+        
+        Args:
+            bead_id: The bead identifier
+            role: Agent role (ceo, pm, cto, po, dev, research, marketing).
+                  If None, role is auto-assigned based on bead intent.
         
         Returns the session object or None if spawn failed.
         """
@@ -431,18 +630,54 @@ class BeadSessionManager:
             # Check if session already exists
             if bead_id in self.sessions and self.sessions[bead_id].is_active:
                 return self.sessions[bead_id]
-            
-            # Check concurrent session limit
-            active_count = sum(1 for s in self.sessions.values() if s.is_active)
-            if active_count >= MAX_CONCURRENT_SESSIONS:
-                print(f"Warning: Max concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
-                return None
         
         # Get bead details
         bead = self.get_bead_details(bead_id)
         if not bead:
             print(f"Error: Could not fetch bead details for {bead_id}")
             return None
+        
+        # Determine role (auto-assign if not specified)
+        if role is None:
+            role = assign_worker_role(bead)
+        role = role.lower()
+        
+        # Get role configuration
+        role_config = get_role_config(role)
+        tier_value = role_config.get("tier", AgentTier.WORKER)
+        tier = tier_value.value if isinstance(tier_value, AgentTier) else tier_value
+        tools = role_config.get("tools", {"read", "write", "bash", "git", "bd"})
+        timeout = role_config.get("timeout", SESSION_TIMEOUT)
+        max_concurrent = role_config.get("max_concurrent", MAX_CONCURRENT_SESSIONS)
+        
+        with self.lock:
+            # Check concurrent session limit for this role
+            active_role_count = sum(1 for s in self.sessions.values() 
+                                    if s.is_active and s.role == role)
+            if active_role_count >= max_concurrent:
+                print(f"Warning: Max concurrent {role.upper()} sessions ({max_concurrent}) reached")
+                return None
+            
+            # Also check global limit
+            active_count = sum(1 for s in self.sessions.values() if s.is_active)
+            if active_count >= MAX_CONCURRENT_SESSIONS:
+                print(f"Warning: Max concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
+                return None
+        
+        # Load persona prompt
+        persona_prompt = load_persona(role)
+        
+        # Create session config with role settings
+        session_config = SessionConfig(
+            timeout=timeout,
+            max_retries=self.config.max_retries,
+            auto_close_on_complete=self.config.auto_close_on_complete,
+            use_prompt_caching=self.config.use_prompt_caching,
+            model=self.config.model,
+            role=role,
+            tools=tools,
+            worktree=role_config.get("worktree", False),
+        )
         
         # Create session
         session = BeadSession(
@@ -451,7 +686,11 @@ class BeadSessionManager:
             description=bead.get("description", ""),
             priority=bead.get("priority", 4),
             state=SessionState.SPAWNING,
-            config=self.config,
+            config=session_config,
+            role=role,
+            tier=tier,
+            tools=tools,
+            persona_prompt=persona_prompt,
         )
         
         with self.lock:
@@ -460,8 +699,8 @@ class BeadSessionManager:
         self._save_session(session)
         self._notify_status_change(session)
         
-        # Build task context
-        context = self.build_task_context(bead)
+        # Build task context with role persona
+        context = self.build_task_context(bead, session)
         
         # Save context for reference
         context_file = SESSIONS_DIR / bead_id / "context.md"
@@ -707,6 +946,9 @@ def main():
     # Spawn command
     spawn_parser = subparsers.add_parser("spawn", help="Spawn session for bead")
     spawn_parser.add_argument("bead_id", help="Bead ID")
+    spawn_parser.add_argument("--role", "-r", 
+                              choices=["ceo", "pm", "cto", "po", "dev", "research", "marketing"],
+                              help="Agent role (auto-detected from bead if not specified)")
     
     # Terminate command
     term_parser = subparsers.add_parser("terminate", help="Terminate session")
@@ -724,10 +966,13 @@ def main():
     # Stats command
     subparsers.add_parser("stats", help="Show session statistics")
     
+    # Roles command
+    subparsers.add_parser("roles", help="List available agent roles")
+    
     args = parser.parse_args()
     
     if args.command == "spawn":
-        session = session_manager.spawn_session(args.bead_id)
+        session = session_manager.spawn_session(args.bead_id, role=args.role)
         if session:
             print(json.dumps(session.to_dict(), indent=2))
         else:
@@ -753,7 +998,8 @@ def main():
                 SessionState.TERMINATED: "⏹️",
             }.get(session.state, "⚪")
             
-            print(f"{status_icon} {session.bead_id}: {session.title[:40]} ({session.state.value})")
+            role_badge = f"[{session.role.upper()}]" if hasattr(session, 'role') else ""
+            print(f"{status_icon} {role_badge:12} {session.bead_id}: {session.title[:35]} ({session.state.value})")
     
     elif args.command == "status":
         session = session_manager.get_session(args.bead_id)
@@ -766,6 +1012,25 @@ def main():
     elif args.command == "stats":
         stats = session_manager.get_stats()
         print(json.dumps(stats, indent=2))
+    
+    elif args.command == "roles":
+        print("\n📋 Available Agent Roles:\n")
+        tier_names = {1: "Orchestrator", 2: "Supervisor", 3: "Worker"}
+        for role, config in sorted(ROLE_SESSION_CONFIG.items(), 
+                                   key=lambda x: x[1]["tier"].value if isinstance(x[1]["tier"], AgentTier) else x[1]["tier"]):
+            tier = config["tier"]
+            tier_val = tier.value if isinstance(tier, AgentTier) else tier
+            tier_name = tier_names.get(tier_val, "Unknown")
+            tools = ", ".join(sorted(config["tools"]))
+            timeout_mins = config["timeout"] // 60
+            ephemeral = "Yes" if config["ephemeral"] else "No"
+            worktree = "Yes" if config.get("worktree") else "No"
+            
+            print(f"  {role.upper():12} Tier {tier_val} ({tier_name})")
+            print(f"               {config['description']}")
+            print(f"               Timeout: {timeout_mins}min | Ephemeral: {ephemeral} | Worktree: {worktree}")
+            print(f"               Tools: {tools}")
+            print()
     
     else:
         parser.print_help()
