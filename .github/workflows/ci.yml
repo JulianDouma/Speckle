@@ -162,6 +162,10 @@ jobs:
           python3 .speckle/scripts/github.py --help
           echo "OK: github.py runs"
 
+      - name: Verify websockets installed
+        run: |
+          python3 -c "import websockets; print(f'OK: websockets {websockets.__version__}')"
+
       - name: Run install --check (via remote script)
         run: |
           ./install-remote.sh --check /tmp/speckle-test

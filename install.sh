@@ -387,6 +387,26 @@ do_install() {
         log "  ${GREEN}[OK]${NC} requirements-terminal.txt"
     fi
     
+    # Install Python dependencies
+    log ""
+    log "${BOLD}Installing Python dependencies...${NC}"
+    if [[ -f "$target/.speckle/scripts/requirements-terminal.txt" ]]; then
+        if command -v pip3 &>/dev/null; then
+            if pip3 install --user -q -r "$target/.speckle/scripts/requirements-terminal.txt" 2>/dev/null; then
+                log "  ${GREEN}[OK]${NC} websockets installed"
+            elif pip3 install --user --break-system-packages -q -r "$target/.speckle/scripts/requirements-terminal.txt" 2>/dev/null; then
+                log "  ${GREEN}[OK]${NC} websockets installed"
+            elif pip3 install -q -r "$target/.speckle/scripts/requirements-terminal.txt" 2>/dev/null; then
+                log "  ${GREEN}[OK]${NC} websockets installed"
+            else
+                log "  ${YELLOW}[WARN]${NC} Could not install websockets (terminal mirroring disabled)"
+                log "         Run manually: pip3 install websockets"
+            fi
+        else
+            log "  ${YELLOW}[WARN]${NC} pip3 not found - skipping Python dependencies"
+        fi
+    fi
+    
     # Copy CLI
     if [[ -f "$SCRIPT_DIR/.speckle/cli.py" ]]; then
         cp "$SCRIPT_DIR/.speckle/cli.py" "$target/.speckle/"
