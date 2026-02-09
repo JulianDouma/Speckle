@@ -1,0 +1,15 @@
+# Speckle mappings (local state)
+.speckle-mapping.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+*.log
