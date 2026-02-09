@@ -14,9 +14,24 @@ import subprocess
 import argparse
 import urllib.parse
 import webbrowser
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+# Add scripts directory to path for imports
+SCRIPTS_DIR = Path(__file__).parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+# Try to import session manager
+try:
+    from session_manager import session_manager, SessionState, BeadSession
+    HAS_SESSION_MANAGER = True
+except ImportError:
+    HAS_SESSION_MANAGER = False
+    session_manager = None
+    SessionState = None
 
 # === Configuration ===
 DEFAULT_PORT = 8420
@@ -24,6 +39,7 @@ DEFAULT_REFRESH = 5
 MAX_CLOSED = 15
 TERMINAL_WS_PORT = 8421  # WebSocket port for terminal server
 TERMINAL_DIR = Path(".speckle/terminals")
+SESSIONS_DIR = Path(".speckle/sessions")
 
 
 # === Terminal Session Detection ===
@@ -40,6 +56,87 @@ def get_active_terminals() -> Dict[str, Dict[str, Any]]:
             except (json.JSONDecodeError, IOError):
                 pass
     return terminals
+
+
+# === Session Management ===
+def get_sessions_info() -> Dict[str, Dict[str, Any]]:
+    """Get session info from session manager or session files."""
+    sessions = {}
+    
+    # Try session manager first
+    if HAS_SESSION_MANAGER and session_manager:
+        for session in session_manager.list_sessions():
+            sessions[session.bead_id] = {
+                "state": session.state.value,
+                "pid": session.pid,
+                "duration": session.duration_seconds,
+                "output_lines": session.output_lines,
+                "started_at": session.started_at.isoformat() if session.started_at else None,
+                "is_active": session.is_active,
+            }
+    else:
+        # Fallback: read from session files
+        if SESSIONS_DIR.exists():
+            for session_dir in SESSIONS_DIR.iterdir():
+                if session_dir.is_dir():
+                    session_file = session_dir / "session.json"
+                    if session_file.exists():
+                        try:
+                            with open(session_file) as f:
+                                data = json.load(f)
+                                bead_id = data.get("bead_id", session_dir.name)
+                                sessions[bead_id] = {
+                                    "state": data.get("state", "unknown"),
+                                    "pid": data.get("pid"),
+                                    "duration": data.get("duration_seconds", 0),
+                                    "output_lines": data.get("output_lines", 0),
+                                    "started_at": data.get("started_at"),
+                                    "is_active": data.get("state") in ("running", "spawning", "stuck"),
+                                }
+                        except (json.JSONDecodeError, IOError):
+                            pass
+    
+    return sessions
+
+
+def spawn_session(bead_id: str) -> Dict[str, Any]:
+    """Spawn a new session for a bead."""
+    if not HAS_SESSION_MANAGER or not session_manager:
+        return {"error": "Session manager not available"}
+    
+    session = session_manager.spawn_session(bead_id)
+    if session:
+        return {
+            "success": True,
+            "bead_id": bead_id,
+            "state": session.state.value,
+            "pid": session.pid,
+        }
+    return {"error": f"Failed to spawn session for {bead_id}"}
+
+
+def terminate_session(bead_id: str) -> Dict[str, Any]:
+    """Terminate a session for a bead."""
+    if not HAS_SESSION_MANAGER or not session_manager:
+        return {"error": "Session manager not available"}
+    
+    if session_manager.terminate_session(bead_id):
+        return {"success": True, "bead_id": bead_id}
+    return {"error": f"Failed to terminate session for {bead_id}"}
+
+
+def format_duration(seconds: float) -> str:
+    """Format duration in human-readable format."""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    elif seconds < 3600:
+        mins = int(seconds / 60)
+        secs = int(seconds % 60)
+        return f"{mins}m {secs}s"
+    else:
+        hours = int(seconds / 3600)
+        mins = int((seconds % 3600) / 60)
+        return f"{hours}h {mins}m"
 
 
 # === T002: Beads JSON Fetching ===
@@ -633,6 +730,107 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             color: var(--p0);
         }}
         
+        /* === Session Status Styles === */
+        .session-indicator {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.65rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            transition: background 0.2s;
+        }}
+        
+        .session-indicator.running {{
+            background: #052e16;
+            color: #4ade80;
+        }}
+        
+        .session-indicator.stuck {{
+            background: #2a1a03;
+            color: #fbbf24;
+        }}
+        
+        .session-indicator.spawning {{
+            background: #0a1628;
+            color: #60a5fa;
+        }}
+        
+        .session-indicator.completed {{
+            background: var(--badge-p3-bg);
+            color: var(--badge-p3-text);
+        }}
+        
+        .session-indicator.failed {{
+            background: var(--badge-p0-bg);
+            color: var(--badge-p0-text);
+        }}
+        
+        .session-duration {{
+            font-family: monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-left: 0.25rem;
+        }}
+        
+        .session-actions {{
+            display: flex;
+            gap: 0.375rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }}
+        
+        .session-btn {{
+            font-size: 0.65rem;
+            padding: 0.25rem 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text);
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }}
+        
+        .session-btn:hover {{
+            background: var(--border);
+        }}
+        
+        .session-btn:disabled {{
+            opacity: 0.5;
+            cursor: not-allowed;
+        }}
+        
+        .session-btn.primary {{
+            background: #3b82f6;
+            border-color: #3b82f6;
+            color: white;
+        }}
+        
+        .session-btn.primary:hover {{
+            background: #2563eb;
+        }}
+        
+        .session-btn.danger {{
+            border-color: var(--p0);
+            color: var(--p0);
+        }}
+        
+        .session-btn.danger:hover {{
+            background: var(--badge-p0-bg);
+        }}
+        
+        .session-info {{
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed var(--border);
+        }}
+        
         /* Modal overlay for full-screen terminal */
         .terminal-modal {{
             display: none;
@@ -757,6 +955,83 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     </div>
     
     <script>
+        // === Session Controller ===
+        const SessionController = {{
+            async spawn(beadId) {{
+                const btn = document.querySelector(`#spawn-btn-${{beadId}}`);
+                if (btn) {{
+                    btn.disabled = true;
+                    btn.textContent = 'Starting...';
+                }}
+                
+                try {{
+                    const response = await fetch(`/api/sessions/${{beadId}}/spawn`, {{
+                        method: 'POST'
+                    }});
+                    const data = await response.json();
+                    
+                    if (data.success) {{
+                        // Reload to show updated state
+                        window.location.reload();
+                    }} else {{
+                        alert(data.error || 'Failed to start session');
+                        if (btn) {{
+                            btn.disabled = false;
+                            btn.textContent = '▶ Start Session';
+                        }}
+                    }}
+                }} catch (e) {{
+                    alert('Error starting session: ' + e.message);
+                    if (btn) {{
+                        btn.disabled = false;
+                        btn.textContent = '▶ Start Session';
+                    }}
+                }}
+            }},
+            
+            async terminate(beadId) {{
+                if (!confirm(`Stop session for ${{beadId}}?`)) return;
+                
+                try {{
+                    const response = await fetch(`/api/sessions/${{beadId}}/terminate`, {{
+                        method: 'POST'
+                    }});
+                    const data = await response.json();
+                    
+                    if (data.success) {{
+                        window.location.reload();
+                    }} else {{
+                        alert(data.error || 'Failed to stop session');
+                    }}
+                }} catch (e) {{
+                    alert('Error stopping session: ' + e.message);
+                }}
+            }},
+            
+            updateDurations() {{
+                document.querySelectorAll('[data-session-started]').forEach(el => {{
+                    const started = new Date(el.dataset.sessionStarted);
+                    const elapsed = (Date.now() - started.getTime()) / 1000;
+                    el.textContent = this.formatDuration(elapsed);
+                }});
+            }},
+            
+            formatDuration(seconds) {{
+                if (seconds < 60) return Math.floor(seconds) + 's';
+                if (seconds < 3600) {{
+                    const mins = Math.floor(seconds / 60);
+                    const secs = Math.floor(seconds % 60);
+                    return `${{mins}}m ${{secs}}s`;
+                }}
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                return `${{hours}}h ${{mins}}m`;
+            }}
+        }};
+        
+        // Update session durations every second
+        setInterval(() => SessionController.updateDurations(), 1000);
+        
         // === Terminal Controller ===
         const TerminalController = {{
             WS_PORT: {ws_port},
@@ -1112,8 +1387,9 @@ GITHUB_ICON = '''<svg class="github-icon" viewBox="0 0 16 16" width="14" height=
 </svg>'''
 
 
-def render_card(issue: Dict[str, Any], terminals: Optional[Dict[str, Any]] = None) -> str:
-    """Render a single issue card with priority, type, time, labels, GitHub link, and terminal."""
+def render_card(issue: Dict[str, Any], terminals: Optional[Dict[str, Any]] = None,
+                sessions: Optional[Dict[str, Any]] = None) -> str:
+    """Render a single issue card with priority, type, time, labels, GitHub link, session status, and terminal."""
     issue_id = issue.get('id', 'unknown')
     title = issue.get('title', 'Untitled')
     priority = issue.get('priority', 4)
@@ -1124,6 +1400,7 @@ def render_card(issue: Dict[str, Any], terminals: Optional[Dict[str, Any]] = Non
     status = issue.get('status', 'open')
     
     terminals = terminals or {}
+    sessions = sessions or {}
     
     # Priority class
     p_class = f'p{min(priority, 4)}'
@@ -1153,13 +1430,68 @@ def render_card(issue: Dict[str, Any], terminals: Optional[Dict[str, Any]] = Non
         github_html = f'''<a href="{github_url}" target="_blank" class="github-link" 
            title="View on GitHub">{GITHUB_ICON}</a>'''
     
+    # Session info
+    session_info = sessions.get(issue_id, {})
+    session_state = session_info.get('state', '')
+    session_active = session_info.get('is_active', False)
+    session_started = session_info.get('started_at', '')
+    session_duration = session_info.get('duration', 0)
+    
+    # Session status HTML
+    session_html = ''
+    
+    # For in_progress cards
+    if status == 'in_progress':
+        if session_active:
+            # Active session - show status, duration, and controls
+            state_labels = {
+                'running': ('🟢', 'Running'),
+                'spawning': ('🔵', 'Starting...'),
+                'stuck': ('🟡', 'Stuck'),
+            }
+            state_icon, state_label = state_labels.get(session_state, ('⚪', session_state))
+            
+            duration_html = ''
+            if session_started:
+                duration_html = f'<span class="session-duration" data-session-started="{session_started}">{format_duration(session_duration)}</span>'
+            
+            session_html = f'''
+        <div class="session-info">
+            <span class="session-indicator {session_state}" title="Session {session_state}">
+                {state_icon} {state_label}
+            </span>
+            {duration_html}
+        </div>
+        <div class="session-actions">
+            <button class="session-btn danger" onclick="SessionController.terminate('{issue_id}')" title="Stop session">
+                ⏹ Stop
+            </button>
+        </div>'''
+        else:
+            # No active session - show start button
+            session_html = f'''
+        <div class="session-actions">
+            <button id="spawn-btn-{issue_id}" class="session-btn primary" onclick="SessionController.spawn('{issue_id}')" title="Start Claude session">
+                ▶ Start Session
+            </button>
+        </div>'''
+    
+    # For open/backlog cards - optionally show start button
+    elif status == 'open' and priority <= 2:
+        # Show start button for high-priority backlog items
+        session_html = f'''
+        <div class="session-actions" style="margin-top: 0.5rem;">
+            <button id="spawn-btn-{issue_id}" class="session-btn" onclick="SessionController.spawn('{issue_id}')" title="Start Claude session (will set to in_progress)">
+                ▶ Start
+            </button>
+        </div>'''
+    
     # Terminal drawer for in_progress cards with active terminal
     terminal_html = ''
     has_terminal = issue_id in terminals
     
     if status == 'in_progress':
-        if has_terminal:
-            terminal_info = terminals[issue_id]
+        if has_terminal or session_active:
             terminal_html = f'''
         <div class="terminal-section" data-terminal-bead="{issue_id}">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
@@ -1179,12 +1511,6 @@ def render_card(issue: Dict[str, Any], terminals: Optional[Dict[str, Any]] = Non
                 </div>
             </div>
         </div>'''
-        else:
-            # Show placeholder for cards without active terminal
-            terminal_html = '''
-        <div style="margin-top: 0.5rem; font-size: 0.65rem; color: var(--text-muted);">
-            No active terminal session
-        </div>'''
     
     return f'''
     <div class="card {p_class}">
@@ -1201,14 +1527,17 @@ def render_card(issue: Dict[str, Any], terminals: Optional[Dict[str, Any]] = Non
             <span>{age}</span>
         </div>
         {labels_html}
+        {session_html}
         {terminal_html}
     </div>
     '''
 
 
-def render_column(status: str, issues: List[Dict[str, Any]], terminals: Optional[Dict[str, Any]] = None) -> str:
+def render_column(status: str, issues: List[Dict[str, Any]], terminals: Optional[Dict[str, Any]] = None,
+                  sessions: Optional[Dict[str, Any]] = None) -> str:
     """Render a kanban column as HTML."""
     terminals = terminals or {}
+    sessions = sessions or {}
     
     icons = {
         'open': '📋',
@@ -1228,7 +1557,7 @@ def render_column(status: str, issues: List[Dict[str, Any]], terminals: Optional
     count = len(issues)
     
     if issues:
-        cards_html = ''.join(render_card(issue, terminals) for issue in issues)
+        cards_html = ''.join(render_card(issue, terminals, sessions) for issue in issues)
     else:
         cards_html = '<div class="empty">No issues</div>'
     
@@ -1254,10 +1583,13 @@ def render_board(issues: List[Dict[str, Any]], label_filter: Optional[str] = Non
     # Get active terminal sessions
     terminals = get_active_terminals()
     
+    # Get Claude session info
+    sessions = get_sessions_info()
+    
     # Build columns HTML
     columns_html = ''
     for status in ['open', 'in_progress', 'blocked', 'closed']:
-        columns_html += render_column(status, columns[status], terminals)
+        columns_html += render_column(status, columns[status], terminals, sessions)
     
     # Filter dropdown
     filter_options = '<option value="">All issues</option>'
@@ -1340,12 +1672,47 @@ class BoardHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(terminals).encode('utf-8'))
             
+        elif parsed.path == '/api/sessions':
+            # Return all sessions info
+            sessions = get_sessions_info()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(sessions).encode('utf-8'))
+            
         elif parsed.path == '/health':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(b'{"status":"ok"}')
             
+        else:
+            self.send_error(404)
+    
+    def do_POST(self):
+        """Handle POST requests for session control."""
+        parsed = urllib.parse.urlparse(self.path)
+        
+        # Session spawn: POST /api/sessions/{bead_id}/spawn
+        if parsed.path.startswith('/api/sessions/') and parsed.path.endswith('/spawn'):
+            bead_id = parsed.path.split('/')[3]
+            result = spawn_session(bead_id)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+        
+        # Session terminate: POST /api/sessions/{bead_id}/terminate
+        elif parsed.path.startswith('/api/sessions/') and parsed.path.endswith('/terminate'):
+            bead_id = parsed.path.split('/')[3]
+            result = terminate_session(bead_id)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+        
         else:
             self.send_error(404)
 
