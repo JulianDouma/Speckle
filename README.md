@@ -128,6 +128,74 @@ Next steps:
   4. bd close speckle-xyz
 ```
 
+## Bugfix Workflow
+
+For quick bug fixes that don't require full spec-kit planning, use the bugfix commands:
+
+### Standard Bugfix
+
+```bash
+/speckle.bugfix "Login fails on mobile Safari"
+```
+
+This creates a lightweight bugfix workflow:
+- Creates a fix branch (e.g., `fix-login-fails-on-mobile-safari`)
+- Creates a bug issue with severity tracking
+- Skips spec-kit overhead for simple fixes
+
+**Example output:**
+```
+✅ Bugfix branch created
+
+📁 Branch: fix-login-fails-on-mobile-safari
+🐛 Issue: speckle-abc
+⚠️  Severity: medium
+
+Workflow:
+  1. Reproduce the bug
+  2. Write a failing test
+  3. Implement the fix
+  4. Verify all tests pass
+  5. bd close speckle-abc
+```
+
+### Urgent Hotfix
+
+For critical production issues requiring immediate attention:
+
+```bash
+/speckle.hotfix "Payment processing timeout in checkout"
+```
+
+This creates an urgent hotfix workflow:
+- Creates a hotfix branch (e.g., `hotfix-payment-processing-timeout`)
+- Creates a critical-severity issue
+- Prioritizes the fix in `bd ready`
+
+**Example output:**
+```
+🚨 HOTFIX branch created
+
+📁 Branch: hotfix-payment-processing-timeout
+🐛 Issue: speckle-xyz
+🔴 Severity: critical
+
+Workflow:
+  1. Reproduce the issue
+  2. Implement minimal fix
+  3. Verify fix works
+  4. bd close speckle-xyz
+  5. Merge immediately
+```
+
+### When to Use Each
+
+| Scenario | Command |
+|----------|---------|
+| Feature development | `/speckit.specify` + `/speckle.sync` |
+| Non-urgent bug | `/speckle.bugfix` |
+| Production incident | `/speckle.hotfix` |
+
 ## How It Works
 
 ```

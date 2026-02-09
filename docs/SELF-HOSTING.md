@@ -245,3 +245,34 @@ git checkout -b NNN-feature-name
 - Focused feature with minimal task count
 - Clean integration with existing beads infrastructure
 - Self-validation confirms formula discovery works correctly
+
+### v0.6.0 Development (2026-02-09)
+
+**Feature:** Bugfix Workflow
+
+**Developed Using:** v0.5.0 (formulas integration, epic lifecycle, enhanced labels)
+
+#### What Worked Well
+- Simple, focused feature - bugfix/hotfix commands are lightweight
+- Clear separation: `/speckle.bugfix` for standard bugs, `/speckle.hotfix` for urgent issues
+- Integrates with existing formula system (`bd formula speckle-bugfix`)
+- Minimal implementation scope kept development quick
+
+#### Pain Points Discovered
+- None - straightforward feature implementation
+
+#### Self-Validation
+- ⚠️ This feature itself wasn't a bugfix, so couldn't fully self-validate
+- ✅ Establishes the pattern for future bugfix workflows
+- ✅ Commands created and documented for immediate use
+- ⏳ First real bugfix will validate the workflow end-to-end
+
+#### Metrics
+- Tasks: 4 (T001-T004)
+- Commands Added: 2 (`/speckle.bugfix`, `/speckle.hotfix`)
+- Documentation: README bugfix section, SELF-HOSTING.md entry
+
+#### Development Approach
+- Phase 1: Command creation (T001-T002, parallel)
+- Phase 2: Documentation (T003-T004, parallel)
+- Minimal scope, focused on bugfix/hotfix differentiation
