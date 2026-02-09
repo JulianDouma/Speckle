@@ -117,6 +117,39 @@ bd comments <issue-id>
 
 This means every new session can pick up exactly where the last one left off.
 
+### Filtering by Labels
+
+When Speckle syncs tasks to beads, labels are applied automatically based on spec metadata.
+Use `bd list --label` to filter tasks:
+
+```bash
+# Filter by phase (from spec headers)
+bd list --label phase:foundation
+bd list --label phase:mvp
+
+# Filter by feature (from branch name)
+bd list --label feature:auth
+
+# Filter by story  
+bd list --label story:us1
+
+# Combine multiple labels (AND - must have ALL)
+bd list --label phase:foundation --label docs
+
+# OR filtering (must have AT LEAST ONE)
+bd list --label-any phase:foundation,phase:mvp
+
+# Short form
+bd list -l docs
+```
+
+Common label patterns:
+- `phase:<phase-name>` - Development phase from spec headers
+- `story:<story-id>` - User story association
+- `feature:<name>` - Feature from branch name
+- `docs` - Documentation tasks
+- `v0.3.0` - Version/milestone labels
+
 ## Self-Hosted Development
 
 Speckle is developed using Speckle! From v0.2.0 onwards, each version is built 
