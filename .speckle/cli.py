@@ -100,11 +100,16 @@ def cmd_ready(args):
 
 def cmd_version(args):
     """Show version information."""
-    version_file = get_speckle_root().parent / 'VERSION'
+    speckle_root = get_speckle_root()
+    # Check in .speckle/ first, then parent directory
+    version_file = speckle_root / 'VERSION'
+    if not version_file.exists():
+        version_file = speckle_root.parent / 'VERSION'
+    
     if version_file.exists():
         version = version_file.read_text().strip()
     else:
-        version = "1.2.0"  # Default
+        version = "1.5.0"  # Default
     print(f"speckle {version}")
     return 0
 

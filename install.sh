@@ -357,7 +357,7 @@ do_install() {
     log ""
     log "${BOLD}Installing commands...${NC}"
     local cmd_count=0
-    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md speckle.convoy.md speckle.workers.md speckle.mayor.md; do
+    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md speckle.convoy.md speckle.workers.md speckle.mayor.md speckle.github.auth.md speckle.github.sync.md; do
         if [[ -f "$SCRIPT_DIR/.claude/commands/$cmd" ]]; then
             cp "$SCRIPT_DIR/.claude/commands/$cmd" "$target/.claude/commands/"
             log "  ${GREEN}[OK]${NC} $cmd"
@@ -373,7 +373,7 @@ do_install() {
     # Copy scripts
     log ""
     log "${BOLD}Installing scripts...${NC}"
-    for script in common.sh comments.sh labels.sh epics.sh loop.sh verifiers.sh convoy.sh workers.sh board.py; do
+    for script in common.sh comments.sh labels.sh epics.sh loop.sh verifiers.sh convoy.sh workers.sh board.py doctor.py github.py terminal_server.py terminal_launcher.sh session_manager.py session_daemon.py; do
         if [[ -f "$SCRIPT_DIR/.speckle/scripts/$script" ]]; then
             cp "$SCRIPT_DIR/.speckle/scripts/$script" "$target/.speckle/scripts/"
             chmod +x "$target/.speckle/scripts/$script"
@@ -381,19 +381,47 @@ do_install() {
         fi
     done
     
+    # Copy requirements files
+    if [[ -f "$SCRIPT_DIR/.speckle/scripts/requirements-terminal.txt" ]]; then
+        cp "$SCRIPT_DIR/.speckle/scripts/requirements-terminal.txt" "$target/.speckle/scripts/"
+        log "  ${GREEN}[OK]${NC} requirements-terminal.txt"
+    fi
+    
+    # Copy CLI
+    if [[ -f "$SCRIPT_DIR/.speckle/cli.py" ]]; then
+        cp "$SCRIPT_DIR/.speckle/cli.py" "$target/.speckle/"
+        chmod +x "$target/.speckle/cli.py"
+        log "  ${GREEN}[OK]${NC} cli.py"
+    fi
+    
+    # Copy VERSION file
+    if [[ -f "$SCRIPT_DIR/VERSION" ]]; then
+        cp "$SCRIPT_DIR/VERSION" "$target/.speckle/"
+        log "  ${GREEN}[OK]${NC} VERSION"
+    fi
+    
     # Copy templates (don't overwrite existing)
     log ""
     log "${BOLD}Installing templates...${NC}"
-    for template in personas.md constitution.md; do
-        if [[ -f "$SCRIPT_DIR/.speckle/templates/$template" ]]; then
-            if [[ ! -f "$target/.speckle/templates/$template" ]]; then
-                cp "$SCRIPT_DIR/.speckle/templates/$template" "$target/.speckle/templates/"
-                log "  ${GREEN}[OK]${NC} $template"
-            else
-                log "  ${BLUE}[SKIP]${NC} $template (already exists)"
+    local template_count=0
+    if compgen -G "$SCRIPT_DIR/.speckle/templates/*.md" > /dev/null 2>&1; then
+        for template in "$SCRIPT_DIR"/.speckle/templates/*.md; do
+            if [[ -f "$template" ]]; then
+                local template_name
+                template_name="$(basename "$template")"
+                if [[ ! -f "$target/.speckle/templates/$template_name" ]]; then
+                    cp "$template" "$target/.speckle/templates/"
+                    log "  ${GREEN}[OK]${NC} $template_name"
+                    ((template_count++))
+                else
+                    log "  ${BLUE}[SKIP]${NC} $template_name (already exists)"
+                fi
             fi
-        fi
-    done
+        done
+    fi
+    if [[ $template_count -eq 0 ]]; then
+        log "  ${BLUE}[INFO]${NC} No templates to install"
+    fi
     
     # Copy DoD verifiers
     log ""
@@ -532,7 +560,7 @@ do_uninstall() {
     log "${BOLD}Removing Speckle files...${NC}"
     
     # Remove commands
-    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md speckle.convoy.md speckle.workers.md speckle.mayor.md; do
+    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md speckle.convoy.md speckle.workers.md speckle.mayor.md speckle.github.auth.md speckle.github.sync.md; do
         if [[ -f "$target/.claude/commands/$cmd" ]]; then
             rm "$target/.claude/commands/$cmd"
             log "  ${GREEN}[OK]${NC} Removed $cmd"

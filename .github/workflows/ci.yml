@@ -1,0 +1,219 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Smoke test: verify Speckle can be installed on a fresh machine
+  install-test:
+    name: Installation Smoke Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10', '3.12']
+
+    steps:
+      - name: Checkout Speckle
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install beads (bd)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+          echo "$HOME/.beads/bin" >> $GITHUB_PATH
+
+      - name: Create fresh test project
+        run: |
+          mkdir -p /tmp/speckle-test
+          cd /tmp/speckle-test
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo "# Test Project" > README.md
+          git add .
+          git commit -m "Initial commit"
+
+      - name: Run installer
+        run: |
+          ./install.sh /tmp/speckle-test
+
+      - name: Verify installation structure
+        run: |
+          cd /tmp/speckle-test
+          
+          echo "=== Checking directories ==="
+          test -d .speckle || (echo "FAIL: .speckle/ missing" && exit 1)
+          test -d .speckle/scripts || (echo "FAIL: .speckle/scripts/ missing" && exit 1)
+          test -d .claude/commands || (echo "FAIL: .claude/commands/ missing" && exit 1)
+          test -d .beads || (echo "FAIL: .beads/ missing" && exit 1)
+          echo "OK: All directories present"
+
+      - name: Verify all scripts installed
+        run: |
+          cd /tmp/speckle-test
+          
+          echo "=== Checking scripts ==="
+          SCRIPTS=(
+            common.sh comments.sh labels.sh epics.sh loop.sh
+            verifiers.sh convoy.sh workers.sh board.py doctor.py
+            github.py terminal_server.py terminal_launcher.sh
+            session_manager.py session_daemon.py cli.py
+          )
+          
+          for script in "${SCRIPTS[@]}"; do
+            if [ -f ".speckle/scripts/$script" ]; then
+              echo "OK: $script"
+            else
+              echo "FAIL: $script missing"
+              exit 1
+            fi
+          done
+          
+          # Check cli.py in .speckle root
+          test -f .speckle/cli.py || (echo "FAIL: cli.py missing from .speckle/" && exit 1)
+          echo "OK: cli.py in .speckle/"
+          
+          # Check VERSION
+          test -f .speckle/VERSION || (echo "FAIL: VERSION missing" && exit 1)
+          echo "OK: VERSION file present"
+
+      - name: Verify all commands installed
+        run: |
+          cd /tmp/speckle-test
+          
+          echo "=== Checking commands ==="
+          COMMANDS=(
+            speckle.sync.md speckle.implement.md speckle.status.md
+            speckle.progress.md speckle.bugfix.md speckle.hotfix.md
+            speckle.doctor.md speckle.board.md speckle.issue.md
+            speckle.triage.md speckle.loop.md speckle.convoy.md
+            speckle.workers.md speckle.mayor.md
+            speckle.github.auth.md speckle.github.sync.md
+          )
+          
+          for cmd in "${COMMANDS[@]}"; do
+            if [ -f ".claude/commands/$cmd" ]; then
+              echo "OK: $cmd"
+            else
+              echo "FAIL: $cmd missing"
+              exit 1
+            fi
+          done
+
+      - name: Test Python scripts syntax
+        run: |
+          cd /tmp/speckle-test
+          
+          echo "=== Validating Python syntax ==="
+          python3 -m py_compile .speckle/cli.py
+          python3 -m py_compile .speckle/scripts/doctor.py
+          python3 -m py_compile .speckle/scripts/board.py
+          python3 -m py_compile .speckle/scripts/github.py
+          python3 -m py_compile .speckle/scripts/terminal_server.py
+          python3 -m py_compile .speckle/scripts/session_manager.py
+          python3 -m py_compile .speckle/scripts/session_daemon.py
+          echo "OK: All Python scripts have valid syntax"
+
+      - name: Test Bash scripts syntax
+        run: |
+          cd /tmp/speckle-test
+          
+          echo "=== Validating Bash syntax ==="
+          for script in .speckle/scripts/*.sh; do
+            bash -n "$script" || (echo "FAIL: $script has syntax errors" && exit 1)
+            echo "OK: $(basename $script)"
+          done
+
+      - name: Test doctor.py runs
+        run: |
+          cd /tmp/speckle-test
+          python3 .speckle/scripts/doctor.py 2>&1 | head -30
+          echo "OK: doctor.py executes"
+
+      - name: Test CLI version
+        run: |
+          cd /tmp/speckle-test
+          VERSION=$(python3 .speckle/cli.py --version)
+          echo "CLI reports: $VERSION"
+          echo "$VERSION" | grep -q "1.5.0" || (echo "FAIL: Version mismatch" && exit 1)
+          echo "OK: Version is correct"
+
+      - name: Test board.py help
+        run: |
+          cd /tmp/speckle-test
+          python3 .speckle/scripts/board.py --help
+          echo "OK: board.py runs"
+
+      - name: Test github.py help
+        run: |
+          cd /tmp/speckle-test
+          python3 .speckle/scripts/github.py --help
+          echo "OK: github.py runs"
+
+      - name: Run install --check
+        run: |
+          ./install.sh --check /tmp/speckle-test
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf /tmp/speckle-test
+
+  # Validate source repository
+  lint:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate all Python scripts
+        run: |
+          echo "=== Checking Python syntax ==="
+          find . -name "*.py" -type f | while read script; do
+            python3 -m py_compile "$script" || exit 1
+            echo "OK: $script"
+          done
+
+      - name: Validate all Bash scripts
+        run: |
+          echo "=== Checking Bash syntax ==="
+          find . -name "*.sh" -type f | while read script; do
+            bash -n "$script" || exit 1
+            echo "OK: $script"
+          done
+
+      - name: Check for hardcoded paths
+        run: |
+          echo "=== Checking for hardcoded paths ==="
+          # Should not have /Users/ or /home/username paths
+          if grep -r "/Users/[a-zA-Z]" --include="*.sh" --include="*.py" . 2>/dev/null | grep -v ".git"; then
+            echo "FAIL: Found hardcoded /Users/ paths"
+            exit 1
+          fi
+          echo "OK: No hardcoded user paths found"
+
+      - name: Verify VERSION file exists
+        run: |
+          test -f VERSION || (echo "FAIL: VERSION file missing" && exit 1)
+          cat VERSION
+          echo "OK: VERSION file exists"
+
+      - name: Verify install.sh is executable
+        run: |
+          test -x install.sh || (echo "FAIL: install.sh not executable" && exit 1)
+          echo "OK: install.sh is executable"
