@@ -307,9 +307,46 @@ def get_issues_with_hierarchy(issues: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def get_epic_effective_status(epic: Dict[str, Any]) -> str:
+    """
+    Determine epic's effective status based on its children.
+    
+    Priority: blocked > in_progress > open > closed
+    - If ANY child is blocked -> blocked
+    - If ANY child is in_progress -> in_progress  
+    - If ALL children are closed -> closed
+    - Otherwise -> open
+    """
+    children = epic.get('children', [])
+    if not children:
+        # No children - use epic's own status
+        return epic.get('status', 'open')
+    
+    statuses = [c.get('status', 'open') for c in children]
+    
+    # Check for blocked first (highest priority)
+    if 'blocked' in statuses or 'deferred' in statuses:
+        return 'blocked'
+    
+    # Check for in_progress
+    if 'in_progress' in statuses:
+        return 'in_progress'
+    
+    # Check if all closed
+    if all(s == 'closed' for s in statuses):
+        return 'closed'
+    
+    # Default to open
+    return 'open'
+
+
 def group_by_status_hierarchical(hierarchy: Dict[str, Any], max_closed: int = MAX_CLOSED) -> Dict[str, Dict]:
     """
     Group hierarchical issues by status, preserving epic structure.
+    
+    Epics are placed in columns based on their children's status (effective status),
+    not their own status. This ensures epics with in-progress work appear in the
+    In Progress column.
     
     Returns columns where each contains either:
     - Epics with their children
@@ -322,9 +359,9 @@ def group_by_status_hierarchical(hierarchy: Dict[str, Any], max_closed: int = MA
         'closed': {'epics': [], 'orphans': []}
     }
     
-    # Group epics by their status
+    # Group epics by their EFFECTIVE status (based on children)
     for epic_id, epic in hierarchy['epics'].items():
-        status = epic.get('status', 'open')
+        status = get_epic_effective_status(epic)
         if status == 'deferred':
             status = 'blocked'
         if status in columns:
@@ -1625,7 +1662,25 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     return;
                 }}
                 
-                // Safe to refresh
+                // Don't refresh if any epic is expanded (would disrupt user)
+                const expandedEpic = document.querySelector('.epic-card.expanded');
+                if (expandedEpic) {{
+                    console.log('Auto-refresh paused: epic expanded');
+                    this.start();
+                    return;
+                }}
+                
+                // Don't refresh if orphans section is expanded
+                const expandedOrphans = document.querySelector('.orphans-section.expanded');
+                if (expandedOrphans) {{
+                    console.log('Auto-refresh paused: orphans expanded');
+                    this.start();
+                    return;
+                }}
+                
+                // Safe to refresh - preserve scroll position
+                const scrollPos = window.scrollY;
+                sessionStorage.setItem('speckle-scroll', scrollPos);
                 window.location.reload();
             }}
         }};
