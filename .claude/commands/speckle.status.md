@@ -16,6 +16,7 @@ Options:
 - No args: Show status for current feature branch
 - `--all`: Show all open tasks across all features
 - `--verbose`: Include full comment history
+- `--by-story`: Group progress by story labels instead of phases
 
 ## Environment Check
 
@@ -85,6 +86,83 @@ if [ "$TOTAL" -gt 0 ]; then
     BAR=$(printf '█%.0s' $(seq 1 $FILLED 2>/dev/null) || echo "")
     BAR+=$(printf '░%.0s' $(seq 1 $EMPTY 2>/dev/null) || echo "")
     echo "   [$BAR]"
+fi
+```
+
+## Progress by Phase
+
+```bash
+# Source the labels helper
+source ".speckle/scripts/labels.sh"
+
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+
+# Check if --by-story flag is set
+if [[ "$ARGUMENTS" == *"--by-story"* ]]; then
+    echo "📈 Progress by Story"
+    echo "═══════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Get unique story labels
+    STORY_LABELS=$(bd list 2>/dev/null | grep -oE 'story:[a-z0-9-]+' | sort -u || echo "")
+    
+    if [ -z "$STORY_LABELS" ]; then
+        echo "   No story labels found"
+    else
+        printf "   %-20s %6s %6s %8s\n" "Story" "Total" "Done" "Progress"
+        printf "   %-20s %6s %6s %8s\n" "────────────────────" "──────" "──────" "────────"
+        
+        echo "$STORY_LABELS" | while read -r label; do
+            if [ -n "$label" ]; then
+                LABEL_TOTAL=$(count_by_label "$label" "")
+                LABEL_CLOSED=$(count_by_label "$label" "closed")
+                
+                if [ "$LABEL_TOTAL" -gt 0 ]; then
+                    LABEL_PCT=$((LABEL_CLOSED * 100 / LABEL_TOTAL))
+                else
+                    LABEL_PCT=0
+                fi
+                
+                # Format the label for display (remove "story:" prefix)
+                DISPLAY_NAME="${label#story:}"
+                
+                printf "   %-20s %6d %6d %7d%%\n" "$DISPLAY_NAME" "$LABEL_TOTAL" "$LABEL_CLOSED" "$LABEL_PCT"
+            fi
+        done
+    fi
+else
+    echo "📈 Progress by Phase"
+    echo "═══════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Get unique phase labels
+    PHASE_LABELS=$(get_phase_labels)
+    
+    if [ -z "$PHASE_LABELS" ]; then
+        echo "   No phase labels found"
+    else
+        printf "   %-20s %6s %6s %8s\n" "Phase" "Total" "Done" "Progress"
+        printf "   %-20s %6s %6s %8s\n" "────────────────────" "──────" "──────" "────────"
+        
+        echo "$PHASE_LABELS" | while read -r label; do
+            if [ -n "$label" ]; then
+                LABEL_TOTAL=$(count_by_label "$label" "")
+                LABEL_CLOSED=$(count_by_label "$label" "closed")
+                
+                if [ "$LABEL_TOTAL" -gt 0 ]; then
+                    LABEL_PCT=$((LABEL_CLOSED * 100 / LABEL_TOTAL))
+                else
+                    LABEL_PCT=0
+                fi
+                
+                # Format the label for display (remove "phase:" prefix)
+                DISPLAY_NAME="${label#phase:}"
+                
+                printf "   %-20s %6d %6d %7d%%\n" "$DISPLAY_NAME" "$LABEL_TOTAL" "$LABEL_CLOSED" "$LABEL_PCT"
+            fi
+        done
+    fi
 fi
 ```
 
