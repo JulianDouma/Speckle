@@ -258,7 +258,14 @@ def get_issues_with_hierarchy(issues: List[Dict[str, Any]]) -> Dict[str, Any]:
     
     for issue in issues:
         issue_type = issue.get('issue_type', 'task')
+        
+        # Extract parent from dependencies array (beads format)
         parent_id = issue.get('parent', '')
+        if not parent_id:
+            for dep in issue.get('dependencies', []):
+                if dep.get('type') == 'parent-child':
+                    parent_id = dep.get('depends_on_id', '')
+                    break
         
         if issue_type == 'epic':
             epics[issue['id']] = {
