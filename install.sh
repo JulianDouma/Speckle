@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-VERSION="1.4.0"
+VERSION="1.5.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Colors (with fallback for non-color terminals)
@@ -347,6 +347,8 @@ do_install() {
     mkdir -p "$target/.speckle/scripts"
     mkdir -p "$target/.speckle/templates"
     mkdir -p "$target/.speckle/formulas"
+    mkdir -p "$target/.speckle/verifiers"
+    mkdir -p "$target/.speckle/workers"
     mkdir -p "$target/.claude/commands"
     mkdir -p "$target/.beads/formulas"
     log "  ${GREEN}[OK]${NC} Directories created"
@@ -355,7 +357,7 @@ do_install() {
     log ""
     log "${BOLD}Installing commands...${NC}"
     local cmd_count=0
-    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md; do
+    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md speckle.convoy.md speckle.workers.md speckle.mayor.md; do
         if [[ -f "$SCRIPT_DIR/.claude/commands/$cmd" ]]; then
             cp "$SCRIPT_DIR/.claude/commands/$cmd" "$target/.claude/commands/"
             log "  ${GREEN}[OK]${NC} $cmd"
@@ -371,7 +373,7 @@ do_install() {
     # Copy scripts
     log ""
     log "${BOLD}Installing scripts...${NC}"
-    for script in common.sh comments.sh labels.sh epics.sh loop.sh board.py; do
+    for script in common.sh comments.sh labels.sh epics.sh loop.sh verifiers.sh convoy.sh workers.sh board.py; do
         if [[ -f "$SCRIPT_DIR/.speckle/scripts/$script" ]]; then
             cp "$SCRIPT_DIR/.speckle/scripts/$script" "$target/.speckle/scripts/"
             chmod +x "$target/.speckle/scripts/$script"
@@ -392,6 +394,22 @@ do_install() {
             fi
         fi
     done
+    
+    # Copy DoD verifiers
+    log ""
+    log "${BOLD}Installing DoD verifiers...${NC}"
+    if compgen -G "$SCRIPT_DIR/.speckle/verifiers/*.toml" > /dev/null 2>&1; then
+        for verifier in "$SCRIPT_DIR"/.speckle/verifiers/*.toml; do
+            if [[ -f "$verifier" ]]; then
+                local verifier_name
+                verifier_name="$(basename "$verifier")"
+                cp "$verifier" "$target/.speckle/verifiers/"
+                log "  ${GREEN}[OK]${NC} $verifier_name"
+            fi
+        done
+    else
+        log "  ${BLUE}[INFO]${NC} No DoD verifiers found"
+    fi
     
     # Copy GitHub issue templates
     log ""
@@ -462,6 +480,9 @@ do_install() {
     log "   /speckle.sync      - Sync tasks.md <-> beads"
     log "   /speckle.implement - Implement next ready task"
     log "   /speckle.loop      - Ralph-style iterative execution"
+    log "   /speckle.convoy    - Bundle related tasks for assignment"
+    log "   /speckle.workers   - Manage ephemeral worker instances"
+    log "   /speckle.mayor     - Autonomous coordinator mode"
     log "   /speckle.status    - Show epic progress"
     log "   /speckle.progress  - Add progress note"
     log "   /speckle.bugfix    - Start bugfix workflow"
@@ -511,7 +532,7 @@ do_uninstall() {
     log "${BOLD}Removing Speckle files...${NC}"
     
     # Remove commands
-    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md; do
+    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md speckle.loop.md speckle.convoy.md speckle.workers.md speckle.mayor.md; do
         if [[ -f "$target/.claude/commands/$cmd" ]]; then
             rm "$target/.claude/commands/$cmd"
             log "  ${GREEN}[OK]${NC} Removed $cmd"

@@ -1,0 +1,97 @@
+# Default DoD (Definition of Done) Verifiers
+# These run automatically when using /speckle.loop --verify
+#
+# Each verifier has:
+#   name     - Human readable name
+#   command  - Shell command to execute
+#   expect   - Expected exit code (default: 0)
+#   timeout  - Timeout in seconds (default: 300)
+#   optional - If true, failure is a warning not an error
+
+[meta]
+version = 1
+description = "Default verifiers for Speckle projects"
+
+# === Build Verifiers ===
+
+[[verifiers]]
+name = "No uncommitted changes"
+command = "test -z \"$(git status --porcelain)\""
+expect = 0
+timeout = 10
+
+[[verifiers]]
+name = "Build passes"
+command = """
+if [ -f Makefile ] && grep -q '^build:' Makefile; then
+    make build
+elif [ -f package.json ] && grep -q '\"build\"' package.json; then
+    npm run build
+elif [ -f composer.json ] && grep -q '\"build\"' composer.json; then
+    composer build
+else
+    echo "No build command found (skipping)"
+    exit 0
+fi
+"""
+expect = 0
+timeout = 300
+
+# === Test Verifiers ===
+
+[[verifiers]]
+name = "Tests pass"
+command = """
+if [ -f Makefile ] && grep -q '^test:' Makefile; then
+    make test
+elif [ -f package.json ] && grep -q '\"test\"' package.json; then
+    npm test
+elif [ -f composer.json ] && grep -q '\"test\"' composer.json; then
+    composer test
+elif [ -f pytest.ini ] || [ -f pyproject.toml ]; then
+    pytest
+elif [ -d tests ] && ls tests/*_test.go >/dev/null 2>&1; then
+    go test ./...
+else
+    echo "No test command found (skipping)"
+    exit 0
+fi
+"""
+expect = 0
+timeout = 600
+
+# === Lint Verifiers (optional) ===
+
+[[verifiers]]
+name = "Lint passes"
+command = """
+if [ -f Makefile ] && grep -q '^lint:' Makefile; then
+    make lint
+elif [ -f package.json ] && grep -q '\"lint\"' package.json; then
+    npm run lint
+elif [ -f .golangci.yml ]; then
+    golangci-lint run
+else
+    echo "No lint command found (skipping)"
+    exit 0
+fi
+"""
+expect = 0
+timeout = 120
+optional = true
+
+# === Security Verifiers (optional) ===
+
+[[verifiers]]
+name = "No secrets in code"
+command = """
+# Check for common secret patterns
+if git diff --cached --name-only | xargs grep -l -E '(password|secret|api_key|token)\\s*=' 2>/dev/null | grep -v -E '(\\.example|\\.sample|test)'; then
+    echo "WARNING: Possible secrets detected in staged files"
+    exit 1
+fi
+exit 0
+"""
+expect = 0
+timeout = 30
+optional = true

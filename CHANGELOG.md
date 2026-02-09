@@ -2,6 +2,93 @@
 
 All notable changes to Speckle are documented here.
 
+## [1.5.0] - 2026-02-09
+
+### Gastown Multi-Agent Architecture
+
+Completes [#18](https://github.com/JulianDouma/Speckle/issues/18) - Gastown/Ralph Integration: Ephemeral Workers for Iterative Development.
+
+Full implementation of the Gastown pattern from [Steve Yegge's Gastown](https://github.com/steveyegge/gastown) (8.8k ⭐) 
+and [Geoffrey Huntley's Ralph](https://github.com/snarktank/ralph) (9.8k ⭐).
+
+### Added
+
+#### /speckle.convoy Command (Phase 3)
+- **Work bundles** - Group related tasks into logical units for parallel execution
+- **Bundle creation** - `--create "name"` to create a convoy from filtered tasks
+- **Status tracking** - View convoy progress and completion percentage
+- **Assignment** - Assign entire convoys to workers (not individual tasks)
+
+#### /speckle.workers Command (Phase 4)
+- **Ephemeral worker management** - Create/destroy workers via git worktrees
+- **Worker lifecycle** - spawn, assign, complete, destroy operations
+- **Git worktree isolation** - Each worker gets isolated checkout (`.speckle/workers/`)
+- **Claude spawn integration** - Workers run as separate Claude Code instances
+- **Status monitoring** - Track active workers and their assignments
+
+#### /speckle.mayor Command (Phase 5)
+- **Autonomous coordinator** - Orchestrates workers without coding directly
+- **Intelligent decomposition** - Breaks work into right-sized convoys
+- **Conflict management** - Prevents merge conflicts between workers
+- **Progress monitoring** - Tracks overall progress across all workers
+- **Completion detection** - Knows when to stop spawning new workers
+
+#### DoD Verifiers (Phase 2)
+- **Definition of Done enforcement** - Tasks must pass verifiers before closing
+- **Configurable verifiers** - `.speckle/verifiers/default.toml` for project settings
+- **Built-in verifiers**:
+  - `build` - Runs build command (make, npm build, composer)
+  - `test` - Runs test suite (make test, npm test, phpunit)
+  - `lint` - Runs linter (eslint, phpstan, golint)
+  - `git_clean` - Ensures no uncommitted changes
+- **Custom verifiers** - Define project-specific checks
+
+#### Helper Libraries
+- `verifiers.sh` - DoD verification functions
+- `convoy.sh` - Convoy management functions
+- `workers.sh` - Worker lifecycle functions
+
+### Gastown Terminology Mapping
+
+| Gastown Term | Speckle Equivalent | Description |
+|--------------|-------------------|-------------|
+| Town | Repository | The workspace |
+| Mayor | /speckle.mayor | Coordinator (never codes) |
+| Convoy | /speckle.convoy | Work bundles |
+| Polecat | /speckle.workers | Ephemeral workers |
+| Hook | .speckle/workers/ | Git worktree persistence |
+| Bead | beads | Same! |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  MAYOR (Coordinator)                                        │
+│  - Never writes code directly                               │
+│  - Spawns workers, assigns convoys                          │
+│  - Monitors progress, handles conflicts                     │
+├─────────────────────────────────────────────────────────────┤
+│  CONVOYS (Work Bundles)                                     │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │
+│  │ convoy-1│  │ convoy-2│  │ convoy-3│                     │
+│  │ 3 tasks │  │ 2 tasks │  │ 5 tasks │                     │
+│  └─────────┘  └─────────┘  └─────────┘                     │
+├─────────────────────────────────────────────────────────────┤
+│  WORKERS (Ephemeral Polecats)                               │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │
+│  │worker-01│  │worker-02│  │worker-03│                     │
+│  │worktree │  │worktree │  │worktree │                     │
+│  │isolated │  │isolated │  │isolated │                     │
+│  └─────────┘  └─────────┘  └─────────┘                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### References
+- [Gastown](https://github.com/steveyegge/gastown) - Multi-agent workspace manager (8.8k ⭐)
+- [Ralph](https://github.com/snarktank/ralph) - Autonomous AI agent loop (9.8k ⭐)
+- [daVinci-Agency](https://arxiv.org/abs/2602.02619) - Long-horizon agent learning
+- [SWE-agent](https://arxiv.org/abs/2405.15793) - Agent-computer interfaces
+
 ## [1.4.0] - 2026-02-09
 
 ### Ralph-Style Iterative Execution Loop

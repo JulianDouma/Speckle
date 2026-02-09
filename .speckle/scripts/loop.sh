@@ -8,6 +8,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
+# Source verifiers if available
+if [ -f "$SCRIPT_DIR/verifiers.sh" ]; then
+    source "$SCRIPT_DIR/verifiers.sh"
+fi
+
 # Progress file location
 PROGRESS_FILE="${SPECKLE_PROGRESS_FILE:-.speckle/progress.txt}"
 

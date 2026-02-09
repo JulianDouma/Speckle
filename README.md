@@ -111,6 +111,9 @@ Options:
 | `/speckle.sync` | Bidirectional sync between tasks.md and beads |
 | `/speckle.implement` | Implement next ready task with progress tracking |
 | `/speckle.loop` | Ralph-style iterative execution until all tasks complete |
+| `/speckle.convoy` | Bundle related tasks for parallel execution |
+| `/speckle.workers` | Manage ephemeral worker instances |
+| `/speckle.mayor` | Autonomous coordinator mode (multi-agent orchestration) |
 | `/speckle.status` | Show epic progress and health |
 | `/speckle.progress` | Add manual progress note to current task |
 | `/speckle.bugfix` | Start lightweight bugfix workflow |
@@ -447,6 +450,112 @@ Only tasks passing all verifiers are closed.
 
 - [Gastown](https://github.com/steveyegge/gastown) - Multi-agent workspace manager (8.8k ⭐)
 - [Ralph](https://github.com/snarktank/ralph) - Autonomous AI agent loop (9.8k ⭐)
+
+## Multi-Agent Orchestration
+
+Speckle implements the full [Gastown pattern](https://github.com/steveyegge/gastown) for coordinating 
+multiple AI agents working in parallel on the same codebase.
+
+### Convoy System
+
+Bundle related tasks for assignment to workers:
+
+```bash
+# Create a convoy from filtered tasks
+/speckle.convoy --create "auth-flow" --filter phase:auth
+
+# View convoy status
+/speckle.convoy --status
+
+# List all convoys
+/speckle.convoy --list
+```
+
+**Convoy principles:**
+- Tasks that touch the same files go in the same convoy
+- A convoy is the unit of work assigned to a worker
+- Convoys prevent merge conflicts by grouping related changes
+
+### Workers (Ephemeral Polecats)
+
+Manage isolated worker instances via git worktrees:
+
+```bash
+# Spawn a new worker
+/speckle.workers --spawn
+
+# Assign a convoy to a worker
+/speckle.workers --assign worker-01 convoy-auth
+
+# Check worker status
+/speckle.workers --status
+
+# Destroy a worker (after convoy complete)
+/speckle.workers --destroy worker-01
+```
+
+**Worker lifecycle:**
+1. **Spawn** - Creates git worktree in `.speckle/workers/worker-XX`
+2. **Assign** - Worker receives a convoy of tasks
+3. **Execute** - Worker implements tasks in isolated checkout
+4. **Complete** - Changes are committed and pushed
+5. **Destroy** - Worktree is cleaned up
+
+### Mayor Mode
+
+Autonomous coordinator that orchestrates multiple workers:
+
+```bash
+# Start mayor mode (autonomous orchestration)
+/speckle.mayor
+
+# With limits
+/speckle.mayor --max-workers 3 --dry-run
+```
+
+**Mayor responsibilities:**
+- **Decomposition** - Breaks work into right-sized convoys
+- **Spawning** - Creates workers as needed
+- **Assignment** - Assigns convoys avoiding conflicts
+- **Monitoring** - Tracks progress across all workers
+- **Completion** - Knows when to stop
+
+**Key principle:** The mayor never writes code directly. It only coordinates.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  MAYOR (Coordinator)                                        │
+│  - Never writes code directly                               │
+│  - Spawns workers, assigns convoys                          │
+│  - Monitors progress, handles conflicts                     │
+├─────────────────────────────────────────────────────────────┤
+│  CONVOYS (Work Bundles)                                     │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │
+│  │ convoy-1│  │ convoy-2│  │ convoy-3│                     │
+│  │ 3 tasks │  │ 2 tasks │  │ 5 tasks │                     │
+│  └─────────┘  └─────────┘  └─────────┘                     │
+├─────────────────────────────────────────────────────────────┤
+│  WORKERS (Ephemeral Polecats)                               │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │
+│  │worker-01│  │worker-02│  │worker-03│                     │
+│  │worktree │  │worktree │  │worktree │                     │
+│  │isolated │  │isolated │  │isolated │                     │
+│  └─────────┘  └─────────┘  └─────────┘                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Gastown Terminology
+
+| Gastown Term | Speckle Equivalent | Description |
+|--------------|-------------------|-------------|
+| Town | Repository | The workspace |
+| Mayor | /speckle.mayor | Coordinator (never codes) |
+| Convoy | /speckle.convoy | Work bundles |
+| Polecat | /speckle.workers | Ephemeral workers |
+| Hook | .speckle/workers/ | Git worktree persistence |
+| Bead | beads | Same! |
 
 ## Troubleshooting
 
