@@ -173,3 +173,42 @@ git checkout -b NNN-feature-name
 - Used parallel agents for foundation phase (T002, T003 marked with `[P]`)
 - Sequential implementation for user story phases
 - Self-validation baked into polish phase (T016)
+
+### v0.4.0 Development (2026-02-09)
+
+**Feature:** Epic Lifecycle
+
+**Developed Using:** v0.3.0 (enhanced labels, phase markers, story labels)
+
+#### What Worked Well
+- Parallel agent execution for foundation tasks (T002, T003) maximized throughput
+- Clear separation of concerns: epics.sh handles lifecycle, sync.md orchestrates creation
+- Phase-based organization (Foundation → US1 → US2 → US3 → Polish) provided clear structure
+- All 4 work streams (foundation, US1, US2, US3) could be parallelized with sub-agents
+- Label system from v0.3.0 enabled clear task filtering by phase and story
+
+#### Pain Points Discovered
+- None - implementation went smoothly
+- The epic lifecycle feature design aligned well with existing beads capabilities (`bd dep add` for linking)
+
+#### Self-Validation (T017)
+- ✅ Feature 003-epic-lifecycle would benefit from an epic to track overall progress
+- ✅ `bd list --label epic` returns no epics yet (this is the feature that creates them!)
+- ✅ The epic feature validates itself: once deployed, future features will have epics
+- ✅ This is a "chicken and egg" scenario - v0.4.0 creates the epic system, v0.5.0+ will use it
+
+#### Metrics
+- Tasks: 17 (T001-T017)
+- User Stories: 3 (US1: Epic creation, US2: State transitions, US3: Progress display)
+- Phases: 5 (Foundation, US1, US2, US3, Polish)
+- Helper Scripts: 1 (`epics.sh` - create_epic, get_epic_id, update_epic_status, get_epic_progress, link_task_to_epic)
+- Functions Added: 6 (in epics.sh)
+- Commands Updated: 2 (`/speckle.sync`, `/speckle.status`)
+
+#### Development Approach
+- Foundation phase: 5 tasks for epics.sh infrastructure (T001-T005)
+- US1 phase: 4 tasks for epic creation during sync (T006-T009)
+- US2 phase: 3 tasks for state transitions (T010-T012)
+- US3 phase: 3 tasks for progress display (T013-T015)
+- Polish phase: 2 tasks for documentation and self-validation (T016-T017)
+- Parallelization: T002/T003 marked with `[P]`, all 4 work streams executed via sub-agents
