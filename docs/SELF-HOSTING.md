@@ -212,3 +212,36 @@ git checkout -b NNN-feature-name
 - US3 phase: 3 tasks for progress display (T013-T015)
 - Polish phase: 2 tasks for documentation and self-validation (T016-T017)
 - Parallelization: T002/T003 marked with `[P]`, all 4 work streams executed via sub-agents
+
+### v0.5.0 Development (2026-02-09)
+
+**Feature:** Formulas Integration
+
+**Developed Using:** v0.4.0 (epic lifecycle, phase markers, enhanced labels)
+
+#### What Worked Well
+- Quick implementation - formulas feature was straightforward to integrate
+- TOML format is clean and readable for formula definitions
+- Minimal scope kept the feature focused and manageable
+- `bd formula list` command works well - found 32 formulas across workflow, expansion, and aspect categories
+
+#### Pain Points Discovered
+- None - implementation went smoothly
+- Note: No local `.beads/formulas/` directory needed - formulas discovered from global/embedded sources
+
+#### Self-Validation
+- ✅ `bd formula list` shows 32 available formulas (workflow, expansion, aspect categories)
+- ✅ Formula categories include: workflow (27), expansion (1), aspect (1), plus 3 Towers of Hanoi variants
+- ✅ Formulas include shiny, shiny-enterprise, shiny-secure, and mol-* molecules
+- ⏳ First version where formulas could be used to create Speckle itself (but weren't yet)
+- ⏳ Future versions will dogfood formulas for feature development
+
+#### Metrics
+- Tasks: 6 (minimal scope, focused feature)
+- Implementation: Straightforward integration with existing bd formula subcommands
+- Formula discovery: Global/embedded formulas work without local `.beads/formulas/` directory
+
+#### Development Approach
+- Focused feature with minimal task count
+- Clean integration with existing beads infrastructure
+- Self-validation confirms formula discovery works correctly
