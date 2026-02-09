@@ -2,6 +2,40 @@
 
 All notable changes to Speckle are documented here.
 
+## [1.3.0] - 2026-02-09
+
+### Systematic Issue Creation Workflow
+
+Addresses [#2](https://github.com/JulianDouma/Speckle/issues/2) - Systematic approach for defining issues using Speckle.
+
+### Added
+- `/speckle.issue` command for guided issue creation
+  - Interactive type selection (feature, bug, enhancement, chore, docs)
+  - Severity/priority assignment for bugs
+  - Optional spec linking for complex features
+  - Automatic GitHub issue creation with proper templates
+  - Automatic beads sync with cross-references
+  - Smart next steps suggestions based on issue type
+- `/speckle.triage` command for issue review and prioritization
+  - Dashboard view with GitHub and beads counts
+  - `--sync` option to sync GitHub issues to beads
+  - `--review` option for interactive issue review
+  - `--stale` option to find stale issues
+- GitHub Issue templates in `.github/ISSUE_TEMPLATE/`:
+  - `feature.md` - Feature requests with acceptance criteria
+  - `bug.md` - Bug reports with severity tracking
+  - `enhancement.md` - Improvement suggestions
+  - `chore.md` - Maintenance and housekeeping tasks
+  - `docs.md` - Documentation requests
+  - `config.yml` - Template chooser configuration
+
+### Benefits
+- Consistent issue quality across the project
+- Self-hosted validation (using Speckle to manage Speckle)
+- Unified tracking across GitHub Issues and Beads
+- Reduced friction for capturing ideas
+- Automatic cross-references between systems
+
 ## [1.2.0] - 2026-02-09
 
 ### Kanban Board

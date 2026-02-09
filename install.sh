@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-VERSION="1.1.0"
+VERSION="1.3.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Colors (with fallback for non-color terminals)
@@ -355,7 +355,7 @@ do_install() {
     log ""
     log "${BOLD}Installing commands...${NC}"
     local cmd_count=0
-    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md; do
+    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md; do
         if [[ -f "$SCRIPT_DIR/.claude/commands/$cmd" ]]; then
             cp "$SCRIPT_DIR/.claude/commands/$cmd" "$target/.claude/commands/"
             log "  ${GREEN}[OK]${NC} $cmd"
@@ -392,6 +392,32 @@ do_install() {
             fi
         fi
     done
+    
+    # Copy GitHub issue templates
+    log ""
+    log "${BOLD}Installing GitHub issue templates...${NC}"
+    if [[ -d "$SCRIPT_DIR/.github/ISSUE_TEMPLATE" ]]; then
+        mkdir -p "$target/.github/ISSUE_TEMPLATE"
+        local template_count=0
+        for template in "$SCRIPT_DIR"/.github/ISSUE_TEMPLATE/*.md "$SCRIPT_DIR"/.github/ISSUE_TEMPLATE/*.yml; do
+            if [[ -f "$template" ]]; then
+                local template_name
+                template_name="$(basename "$template")"
+                if [[ ! -f "$target/.github/ISSUE_TEMPLATE/$template_name" ]]; then
+                    cp "$template" "$target/.github/ISSUE_TEMPLATE/"
+                    log "  ${GREEN}[OK]${NC} $template_name"
+                    ((template_count++))
+                else
+                    log "  ${BLUE}[SKIP]${NC} $template_name (already exists)"
+                fi
+            fi
+        done
+        if [[ $template_count -eq 0 ]]; then
+            log "  ${BLUE}[INFO]${NC} All templates already exist"
+        fi
+    else
+        log "  ${BLUE}[INFO]${NC} No GitHub issue templates found"
+    fi
     
     # Copy formulas
     log ""
@@ -439,6 +465,8 @@ do_install() {
     log "   /speckle.progress  - Add progress note"
     log "   /speckle.bugfix    - Start bugfix workflow"
     log "   /speckle.hotfix    - Start urgent fix workflow"
+    log "   /speckle.issue     - Guided issue creation"
+    log "   /speckle.triage    - Review and prioritize issues"
     log "   /speckle.doctor    - Diagnose installation issues"
     log "   /speckle.board     - Web-based kanban board"
     log ""
@@ -482,7 +510,7 @@ do_uninstall() {
     log "${BOLD}Removing Speckle files...${NC}"
     
     # Remove commands
-    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md; do
+    for cmd in speckle.sync.md speckle.implement.md speckle.status.md speckle.progress.md speckle.bugfix.md speckle.hotfix.md speckle.doctor.md speckle.board.md speckle.issue.md speckle.triage.md; do
         if [[ -f "$target/.claude/commands/$cmd" ]]; then
             rm "$target/.claude/commands/$cmd"
             log "  ${GREEN}[OK]${NC} Removed $cmd"

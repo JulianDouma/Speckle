@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Speckle Documentation
+    url: https://github.com/JulianDouma/Speckle#readme
+    about: Check our documentation for help and guides
+  - name: Use /speckle.issue command
+    url: https://github.com/JulianDouma/Speckle#commands
+    about: For guided issue creation with beads integration, use the /speckle.issue command

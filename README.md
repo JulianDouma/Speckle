@@ -114,6 +114,8 @@ Options:
 | `/speckle.progress` | Add manual progress note to current task |
 | `/speckle.bugfix` | Start lightweight bugfix workflow |
 | `/speckle.hotfix` | Start urgent hotfix workflow |
+| `/speckle.issue` | Guided issue creation with GitHub + beads sync |
+| `/speckle.triage` | Review and prioritize issues across GitHub and beads |
 | `/speckle.doctor` | Diagnose installation and configuration issues |
 | `/speckle.board` | Web-based kanban board for visualizing issues |
 
@@ -236,6 +238,99 @@ Workflow:
 | Feature development | `/speckit.specify` + `/speckle.sync` |
 | Non-urgent bug | `/speckle.bugfix` |
 | Production incident | `/speckle.hotfix` |
+
+## Issue Creation Workflow
+
+Create issues using a structured, guided approach that syncs with both GitHub Issues and beads:
+
+### Guided Issue Creation
+
+```bash
+/speckle.issue "Add dark mode support"
+```
+
+This walks you through:
+1. **Classify** - Select issue type (feature, bug, enhancement, chore, docs)
+2. **Describe** - Add detailed description
+3. **Prioritize** - Set severity (for bugs) or priority
+4. **Link** - Optionally link to an existing spec or create a new one
+5. **Create** - Generates GitHub issue with proper template
+6. **Sync** - Automatically syncs to beads for unified tracking
+
+**Example output:**
+```
+✅ Issue created successfully!
+
+📋 Summary:
+   Title: Add dark mode support
+   Type: feature
+   GitHub: https://github.com/user/repo/issues/42
+   Beads: speckle-abc
+
+🎯 Next steps:
+   1. Create feature: bd formula speckle-feature "Add dark mode support"
+   2. Develop spec: /speckit.specify
+   3. Plan: /speckit.plan
+   4. Tasks: /speckit.tasks
+   5. Sync: /speckle.sync
+```
+
+### Issue Templates
+
+Speckle includes GitHub Issue templates in `.github/ISSUE_TEMPLATE/`:
+
+| Template | Use for |
+|----------|---------|
+| `feature.md` | New functionality requests |
+| `bug.md` | Bug reports with severity tracking |
+| `enhancement.md` | Improvements to existing features |
+| `chore.md` | Maintenance and housekeeping tasks |
+| `docs.md` | Documentation updates |
+
+### Issue Triage
+
+Review and prioritize issues across GitHub and beads:
+
+```bash
+/speckle.triage
+```
+
+**Dashboard view** shows issue counts and sync status:
+```
+📊 Speckle Issue Triage Dashboard
+════════════════════════════════════════════════════════════
+
+📌 GitHub Issues
+   Open: 12
+   Bugs: 3
+   Features: 5
+
+🔮 Beads Issues
+   Open: 10
+   In Progress: 2
+   Blocked: 1
+
+⚠️  Potential Issues:
+   2 GitHub issue(s) not synced to beads
+   Run: /speckle.triage --sync
+```
+
+**Options:**
+
+```bash
+/speckle.triage --sync    # Sync all open GitHub issues to beads
+/speckle.triage --review  # Interactive review of issues
+/speckle.triage --stale   # Find stale issues needing attention
+```
+
+### When to Use Each
+
+| Scenario | Command |
+|----------|---------|
+| Quick bug report | `/speckle.bugfix` |
+| Detailed issue (any type) | `/speckle.issue` |
+| Review issue backlog | `/speckle.triage` |
+| Complex feature | `/speckle.issue` → `/speckit.specify` |
 
 ## Kanban Board
 
