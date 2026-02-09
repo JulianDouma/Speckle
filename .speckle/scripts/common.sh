@@ -91,8 +91,38 @@ truncate() {
     fi
 }
 
+# JSON helpers using jq (portable and reliable)
+# Get a value from a JSON file
+json_get() {
+    local file="$1"
+    local key="$2"
+    jq -r ".$key // empty" "$file" 2>/dev/null || echo ""
+}
+
+# Set a value in a JSON file (creates backup, then removes it)
+json_set() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    local tmp="${file}.tmp.$$"
+    if jq --arg v "$value" ".$key = \$v" "$file" > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$file"
+    else
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
+# Get all values for a key in a JSON array
+json_get_all() {
+    local file="$1"
+    local key="$2"
+    jq -r ".[] | .$key // empty" "$file" 2>/dev/null || echo ""
+}
+
 # Export functions
 export -f log_info log_success log_warn log_error
 export -f get_repo_root get_feature_branch get_feature_dir
 export -f check_beads check_speckit
 export -f slugify truncate
+export -f json_get json_set json_get_all

@@ -71,12 +71,8 @@ get_epic_id() {
         return 0
     fi
     
-    # Extract epicId from JSON
-    local epic_id
-    epic_id=$(grep -oE '"epicId":\s*"[^"]+"' "$mapping_file" | \
-        sed 's/"epicId":\s*"//' | sed 's/"$//' || echo "")
-    
-    echo "$epic_id"
+    # Extract epicId from JSON using jq (portable and reliable)
+    json_get "$mapping_file" "epicId"
 }
 
 # Save epic ID to mapping file
@@ -92,14 +88,8 @@ save_epic_id() {
         return 1
     fi
     
-    # Add epicId to mapping (simple approach - add after version)
-    if grep -q '"epicId"' "$mapping_file"; then
-        # Update existing
-        sed -i '' "s/\"epicId\":\s*\"[^\"]*\"/\"epicId\": \"$epic_id\"/" "$mapping_file"
-    else
-        # Add new (after "version":X)
-        sed -i '' "s/\"version\":\s*\([0-9]*\)/\"version\": \1, \"epicId\": \"$epic_id\"/" "$mapping_file"
-    fi
+    # Add/update epicId in mapping using jq (portable and reliable)
+    json_set "$mapping_file" "epicId" "$epic_id"
 }
 
 # Update epic status based on task states
@@ -115,10 +105,9 @@ update_epic_status() {
         return 0
     fi
     
-    # Get task bead IDs from mapping
+    # Get task bead IDs from mapping using jq
     local task_ids
-    task_ids=$(grep -oE '"beadId":\s*"[^"]+"' "$mapping_file" | \
-        sed 's/"beadId":\s*"//' | sed 's/"$//' || echo "")
+    task_ids=$(jq -r '.tasks[]?.beadId // empty' "$mapping_file" 2>/dev/null || echo "")
     
     if [ -z "$task_ids" ]; then
         # No tasks yet - epic stays open
@@ -131,14 +120,14 @@ update_epic_status() {
     
     while read -r bead_id; do
         [ -z "$bead_id" ] && continue
-        ((total++))
+        ((total++)) || true
         
         local status
         status=$(bd show "$bead_id" 2>/dev/null | grep -oE 'Status:\s*\w+' | awk '{print $2}' || echo "open")
         
         case "$status" in
-            closed) ((closed++)) ;;
-            in_progress) ((in_progress++)) ;;
+            closed) ((closed++)) || true ;;
+            in_progress) ((in_progress++)) || true ;;
         esac
     done <<< "$task_ids"
     
@@ -170,10 +159,9 @@ get_epic_progress() {
         return
     fi
     
-    # Get task bead IDs
+    # Get task bead IDs using jq
     local task_ids
-    task_ids=$(grep -oE '"beadId":\s*"[^"]+"' "$mapping_file" | \
-        sed 's/"beadId":\s*"//' | sed 's/"$//' || echo "")
+    task_ids=$(jq -r '.tasks[]?.beadId // empty' "$mapping_file" 2>/dev/null || echo "")
     
     if [ -z "$task_ids" ]; then
         echo "0"
@@ -185,13 +173,13 @@ get_epic_progress() {
     
     while read -r bead_id; do
         [ -z "$bead_id" ] && continue
-        ((total++))
+        ((total++)) || true
         
         local status
         status=$(bd show "$bead_id" 2>/dev/null | grep -oE 'Status:\s*\w+' | awk '{print $2}' || echo "open")
         
         if [ "$status" = "closed" ]; then
-            ((closed++))
+            ((closed++)) || true
         fi
     done <<< "$task_ids"
     
