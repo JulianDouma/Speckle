@@ -42,7 +42,24 @@ bd init
 git clone https://github.com/JulianDouma/Speckle.git /tmp/speckle
 /tmp/speckle/install.sh /path/to/your/project
 
+# Verify installation
+/tmp/speckle/install.sh --check /path/to/your/project
+
 # Restart your AI agent to load commands
+```
+
+#### Installer Options
+
+```bash
+./install.sh [OPTIONS] [TARGET_DIR]
+
+Options:
+  --help, -h      Show help message
+  --version, -v   Show version
+  --check         Run health check only
+  --uninstall     Remove Speckle from target
+  --force         Skip prerequisite warnings
+  --quiet, -q     Minimal output
 ```
 
 ### Workflow
@@ -75,6 +92,9 @@ git clone https://github.com/JulianDouma/Speckle.git /tmp/speckle
 | `/speckle.implement` | Implement next ready task with progress tracking |
 | `/speckle.status` | Show epic progress and health |
 | `/speckle.progress` | Add manual progress note to current task |
+| `/speckle.bugfix` | Start lightweight bugfix workflow |
+| `/speckle.hotfix` | Start urgent hotfix workflow |
+| `/speckle.doctor` | Diagnose installation and configuration issues |
 
 ## Formulas
 
@@ -195,6 +215,47 @@ Workflow:
 | Feature development | `/speckit.specify` + `/speckle.sync` |
 | Non-urgent bug | `/speckle.bugfix` |
 | Production incident | `/speckle.hotfix` |
+
+## Troubleshooting
+
+Use the doctor command to diagnose issues:
+
+```bash
+/speckle.doctor
+```
+
+**Example output:**
+```
+🩺 Speckle Doctor
+════════════════════════════════════════════════════════════
+
+📦 Prerequisites
+
+  ✅ git: 2.42.0
+  ✅ gh: 2.40.0
+     └─ Authenticated
+  ✅ bd: installed
+  ℹ️  specify: NOT FOUND (optional)
+
+📁 Directory Structure
+
+  ✅ .speckle/
+     └─ scripts/ (4 files)
+     └─ templates/ (2 files)
+  ✅ .claude/commands/ (7 speckle commands)
+  ✅ .beads/
+     └─ config.toml exists
+
+📊 Diagnosis Summary
+
+  🎉 All checks passed! Speckle is healthy.
+```
+
+Use `--fix` to attempt automatic repairs:
+
+```bash
+/speckle.doctor --fix
+```
 
 ## How It Works
 

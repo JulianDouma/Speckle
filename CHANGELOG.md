@@ -2,6 +2,36 @@
 
 All notable changes to Speckle are documented here.
 
+## [1.1.0] - 2026-02-09
+
+### Improved Installation Experience
+
+Addresses [#1](https://github.com/JulianDouma/Speckle/issues/1).
+
+### Added
+- `/speckle.doctor` command for diagnosing installation and configuration issues
+  - Prerequisites check (git, gh, bd, specify)
+  - Directory structure validation
+  - Script permissions verification
+  - Beads integration health check
+  - `--fix` option for automatic repairs
+  - `--verbose` option for detailed output
+- `--help` option with comprehensive usage information
+- `--uninstall` option to cleanly remove Speckle
+- `--check` option to run health check without installing
+- `--force` option to skip prerequisite warnings
+- `--quiet` option for minimal output
+- `--version` option to show version
+- Color-coded terminal output (with fallback for non-color terminals)
+- Shell environment detection (bash, zsh, fish)
+- Post-install verification check
+
+### Improved
+- Comprehensive prerequisite validation with recovery suggestions
+- Better error messages with actionable guidance
+- Preserved existing files during uninstall (beads data, specs)
+- Version bumped to 1.1.0
+
 ## [1.0.0] - 2026-02-09
 
 ### Production Release
