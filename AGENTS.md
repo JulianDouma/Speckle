@@ -1,5 +1,40 @@
 # Agent Instructions
 
+## ⚠️ CRITICAL: Self-Hosted Development
+
+**This is the Speckle project itself. Tasks MUST be Speckle tasks.**
+
+We develop **Speckle using Speckle** - this is our core dogfooding principle:
+
+| Rule | Description |
+|------|-------------|
+| **Issue prefix** | All issues use `speckle-` prefix (configured) |
+| **Workflow** | Use `/speckle.*` commands for all work |
+| **Tracking** | Track progress via beads (`bd ready`, `bd close`) |
+| **Memory** | Implementation context persists in bead comments |
+
+```bash
+# CORRECT: Use Speckle workflows
+/speckle.sync              # Sync tasks to beads
+/speckle.implement         # Implement with tracking
+/speckle.bugfix "issue"    # Start bugfix workflow
+
+# CORRECT: Use bd for issue tracking
+bd ready                   # Find next task
+bd close speckle-abc       # Complete task
+
+# WRONG: Do NOT use external issue trackers
+# WRONG: Do NOT skip beads tracking
+# WRONG: Do NOT work without speckle- prefixed issues
+```
+
+This ensures every improvement to Speckle validates the tool itself.
+See [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md) for the complete dogfooding philosophy.
+
+---
+
+## Issue Tracking
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
