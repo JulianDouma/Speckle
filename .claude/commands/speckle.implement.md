@@ -173,42 +173,20 @@ After implementation, I will:
 After the agent completes implementation:
 
 ```bash
-# Gather implementation details
-FILES_CHANGED=$(git diff --name-only HEAD~1 2>/dev/null | head -20)
-LINES_ADDED=$(git diff --numstat HEAD~1 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
-LINES_REMOVED=$(git diff --numstat HEAD~1 2>/dev/null | awk '{sum+=$2} END {print sum+0}')
+# Source comment helpers
+source ".speckle/scripts/comments.sh"
 
-# Try to get test coverage (Go example)
-COVERAGE=$(go test -cover ./... 2>/dev/null | grep -oP 'coverage: \K[0-9.]+' | head -1 || echo "N/A")
+# Gather implementation details using helper function
+DIFF_OUTPUT=$(get_diff_stats HEAD~1)
+FILES_CHANGED=$(echo "$DIFF_OUTPUT" | head -n -2)
+LINES_ADDED=$(echo "$DIFF_OUTPUT" | tail -2 | head -1)
+LINES_REMOVED=$(echo "$DIFF_OUTPUT" | tail -1)
 
-# Build comment
-COMMENT="## Implementation Complete
+# Format completion comment using helper
+COMMENT=$(format_completion_comment "$SELECTED_TASK" "$SELECTED_BEAD" "$FILES_CHANGED" "$LINES_ADDED" "$LINES_REMOVED")
 
-**Task:** $SELECTED_TASK
-**Bead:** $SELECTED_BEAD
-
-### Changes
-- Lines added: $LINES_ADDED
-- Lines removed: $LINES_REMOVED
-
-### Files Modified
-\`\`\`
-$FILES_CHANGED
-\`\`\`
-
-### Test Coverage
-$COVERAGE%
-
-### Completed By
-- Actor: ${BD_ACTOR:-$(git config user.name)}
-- Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
----
-*Recorded by Speckle*"
-
-# Add comment to bead
-bd comments add $SELECTED_BEAD "$COMMENT"
-echo "📝 Progress recorded"
+# Add comment safely (won't fail the workflow if beads is unavailable)
+add_comment_safe "$SELECTED_BEAD" "$COMMENT"
 ```
 
 ## Compliance Check
