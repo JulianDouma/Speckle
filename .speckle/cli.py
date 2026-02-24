@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -140,6 +141,12 @@ def cmd_gh(args):
     RESET = '\033[0m'
     DIM = '\033[2m'
     
+    # Check if gh CLI is installed
+    if not shutil.which("gh"):
+        print("Error: GitHub CLI (gh) not installed", file=sys.stderr)
+        print("Install from: https://cli.github.com", file=sys.stderr)
+        return 1
+
     # Fetch issues from GitHub
     cmd = ['gh', 'issue', 'list', '--json', 'number,title,labels,state', '--limit', str(args.limit)]
     if args.all:
